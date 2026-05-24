@@ -26,6 +26,9 @@ if "%HAS_PACKAGES%"=="0" (
 
 :: Step 1: Clean up old builds
 echo [1/5] Cleaning up old builds...
+echo   Killing any running WinVE and flet processes...
+taskkill /F /IM WinVE.exe >nul 2>&1
+taskkill /F /IM flet.exe >nul 2>&1
 if exist "dist" (
     echo   Removing dist folder...
     rmdir /s /q "dist"

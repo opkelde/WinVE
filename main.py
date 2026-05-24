@@ -26,8 +26,6 @@ from wake_word_detector import WakeWordDetector, validate_wake_word_config
 import platform
 from platform_utils import get_icon_path
 from dummy_animation_server import DummyAnimationServer
-from conversation_manager import ConversationManager
-from prompt_server import PromptServer
 from satellite_protocol import SatelliteServer
 
 logger = utils.setup_logger()
@@ -37,7 +35,6 @@ class HAAssistApp:
 
     def __init__(self, open_settings_on_start=False):
         """Initialize application."""
-        self.ha_client = None
         self.audio_manager = None
         self.animation_server = None
         self.window = None
@@ -46,10 +43,8 @@ class HAAssistApp:
         self.tray_icon = None
         self.window_visible = True
         self.wake_word_detector = None
-        self.conversation_manager = None
-        self.prompt_server = None
         self.satellite_server = None
-        self.connection_mode = utils.get_env("CONNECTION_MODE", "esphome").lower()
+        self.connection_mode = "esphome"
         self.animations_enabled = utils.get_env_bool("HA_ANIMATIONS_ENABLED", True)
         self.response_text_enabled = utils.get_env_bool("HA_RESPONSE_TEXT_ENABLED", True)
         self.open_settings_on_start = open_settings_on_start
@@ -81,18 +76,10 @@ class HAAssistApp:
         """Callback when wake word is detected."""
         logger.info(f"🎯 Wake word '{model_name}' detected (confidence: {confidence:.3f})")
 
-        if self.connection_mode == "esphome":
-            if self.satellite_server:
-                self.satellite_server.wakeup()
-            else:
-                logger.warning("ESPHome mode: satellite server not running")
-            return
-
-        # WebSocket mode: check if busy then trigger
-        if self.animation_server.current_state != "hidden":
-            logger.info("Application is busy, ignoring wake word")
-            return
-        self.on_voice_command_trigger()
+        if self.satellite_server:
+            self.satellite_server.wakeup()
+        else:
+            logger.warning("Satellite server not running")
 
     def start_wake_word_detection(self):
         """Start wake word detection if enabled."""
@@ -401,43 +388,6 @@ class HAAssistApp:
         self.animation_server.set_voice_command_callback(self.on_voice_command_trigger)
         self.animation_server.start()
     
-    def setup_conversation_manager(self):
-        """Setup conversation manager for interactive prompts."""
-        if not (self.ha_client and self.audio_manager and self.animation_server):
-            logger.error("Cannot setup conversation manager - dependencies not initialized")
-            return False
-        
-        self.conversation_manager = ConversationManager(
-            self.ha_client, 
-            self.audio_manager, 
-            self.animation_server
-        )
-        
-        # Set conversation manager reference in HA client for context cleanup
-        self.ha_client.set_conversation_manager(self.conversation_manager)
-        
-        logger.info("✅ Conversation manager initialized")
-        return True
-    
-    def setup_prompt_server(self):
-        """Setup HTTP server for receiving HA prompts."""
-        if not self.conversation_manager:
-            logger.error("Cannot setup prompt server - conversation manager not initialized")
-            return False
-        
-        port = utils.get_env("HA_PROMPT_SERVER_PORT", 8766, int)
-        self.prompt_server = PromptServer(self.conversation_manager, port)
-        
-        success = self.prompt_server.start()
-        if success:
-            logger.info(f"✅ Prompt server listening on port {port}")
-            return True
-        else:
-            logger.error("❌ Failed to start prompt server")
-            return False
-    
-    # setup_webview removed — replaced by Flet overlay in flet_overlay.py
-
     def open_settings(self, icon=None, item=None):
         """Open enhanced settings window in a separate process."""
         logger.info("Opening enhanced settings in a separate process...")
@@ -470,258 +420,12 @@ class HAAssistApp:
             )
             root.destroy()
 
-    async def process_voice_command(self):
-        """Enhanced voice command processing with pipeline validation."""
-        # Store references to temporary instances for cleanup
-        # temp variables removed - using self.ha_client and self.audio_manager
-        
-        # Volume management variables
-        saved_volumes = {}
-        media_player_entities = []
-        target_volume = None
-        
-        try:
-            # Load media player configuration
-            entities_config = utils.get_env("HA_MEDIA_PLAYER_ENTITIES", "")
-            if entities_config:
-                media_player_entities = [e.strip() for e in entities_config.split(',') if e.strip()]
-                target_volume = utils.get_env("HA_MEDIA_PLAYER_TARGET_VOLUME", 0.3, float)
-                logger.info(f"Media player volume management enabled for {len(media_player_entities)} entities")
-            
-            self.animation_server.change_state("listening")
-            utils.play_feedback_sound("activation")
-            
-            # Use existing instances or create temporary ones
-            ha_client = self.ha_client if self.ha_client else HomeAssistantClient()
-            audio_manager = self.audio_manager if self.audio_manager else AudioManager()
-            
-            pipeline_id = utils.get_env("HA_PIPELINE_ID")
-            if pipeline_id:
-                logger.info(f"Checking pipeline availability: {pipeline_id}")
-            
-            if not self.audio_manager:  # Only init if not already initialized
-                audio_manager.init_audio()
-            
-            if not await ha_client.connect():
-                logger.error("Failed to connect to Home Assistant")
-                self.animation_server.change_state("error", "Cannot connect to Home Assistant")
-                await asyncio.sleep(5)
-                self.animation_server.change_state("hidden")
-                utils.play_feedback_sound("deactivation")
-                return False
-            
-            logger.info("Connected to Home Assistant")
-            
-            # Save current volumes and set target volume immediately
-            if media_player_entities and not ha_client.volumes_managed:
-                try:
-                    logger.info("Saving current volumes and setting target volume immediately")
-                    saved_volumes = await ha_client.get_multiple_volumes(media_player_entities)
-                    if saved_volumes:
-                        logger.info(f"Saved volumes: {saved_volumes}")
-                        
-                        # Set target volume for all entities immediately
-                        target_settings = {entity_id: target_volume for entity_id in media_player_entities}
-                        results = await ha_client.set_multiple_volumes(target_settings)
-                        logger.info(f"Set target volumes: {results}")
-                        ha_client.volumes_managed = True  # Mark as managed
-                        ha_client.saved_volumes_for_restore = saved_volumes  # Store for restore
-                    else:
-                        logger.warning("Could not retrieve current volumes")
-                except Exception as e:
-                    logger.error(f"Error managing volumes: {e}")
-            elif media_player_entities and ha_client.volumes_managed:
-                logger.info("Volumes already managed by previous call")
-            
-            if pipeline_id and not ha_client.validate_pipeline_id(pipeline_id):
-                logger.warning(f"Pipeline '{pipeline_id}' not available - using default")
-                
-            continue_on_question = utils.get_env("HA_CONTINUE_ON_QUESTION", "false").lower() in ("true", "1", "yes")
-            keep_listening = True
-
-            while keep_listening:
-                keep_listening = False  # assume one turn unless question detected
-
-                if not await ha_client.start_assist_pipeline(timeout_seconds=30):
-                    logger.error("Failed to start Assist pipeline")
-                    self.animation_server.change_state("error", "Cannot start voice assistant")
-                    await asyncio.sleep(5)
-                    self.animation_server.change_state("hidden")
-                    utils.play_feedback_sound("deactivation")
-                    return False
-
-                logger.info("Assist pipeline started successfully")
-
-                print("\n=== LISTENING ===")
-                print("(Waiting for voice, speak to microphone...)")
-
-                async def on_audio_chunk(audio_chunk):
-                    self.animation_server.send_audio_data(audio_chunk)
-                    success = await ha_client.send_audio_chunk(audio_chunk)
-                    if not success:
-                        logger.warning("Error sending audio chunk")
-
-                async def on_audio_end():
-                    logger.info("=== SWITCHING TO PROCESSING ===")
-                    self.animation_server.change_state("processing")
-                    await asyncio.sleep(0.8)
-                    success = await ha_client.end_audio()
-                    if not success:
-                        logger.warning("Error ending audio")
-
-                if await audio_manager.record_audio(on_audio_chunk, on_audio_end):
-                    logger.info("Audio sent successfully")
-
-                    logger.info("=== RECEIVING RESPONSE ===")
-                    results = await ha_client.receive_response(timeout_seconds=45)
-
-                    error_found = False
-                    for result in results:
-                        if result.get('type') == 'event':
-                            event = result.get('event', {})
-                            if event.get('type') == 'error':
-                                error_code = event.get('data', {}).get('code', 'unknown')
-                                error_message = event.get('data', {}).get('message', 'Unknown error')
-
-                                print(f"\n=== ASSISTANT ERROR ===")
-                                utils.safe_print(f"Error: {error_code} - {error_message}")
-                                print("===========================\n")
-
-                                full_error_message = f"{error_code}: {error_message}"
-
-                                if error_code == "stt-stream-failed":
-                                    full_error_message = "Speech not recognized. Try again."
-                                elif error_code == "intent-failed":
-                                    full_error_message = "Command not understood. Speak clearer."
-                                elif error_code == "pipeline-not-found":
-                                    full_error_message = "Configuration error. Check settings."
-                                elif error_code == "stt-no-text-recognized":
-                                    full_error_message = "No words detected. Try again."
-
-                                self.animation_server.change_state("error", full_error_message)
-                                await asyncio.sleep(5)
-                                self.animation_server.change_state("hidden")
-                                utils.play_feedback_sound("deactivation")
-
-                                error_found = True
-                                break
-
-                    if not error_found:
-                        response = ha_client.extract_assistant_response(results)
-
-                        if response and response != "No response from assistant":
-                            print("\n=== ASSISTANT RESPONSE ===")
-                            utils.safe_print(response)
-                            print("===========================\n")
-
-                            self.animation_server.change_state("responding")
-
-                            if self.response_text_enabled:
-                                self.animation_server.send_response_text(response)
-
-                            audio_url = ha_client.extract_audio_url(results)
-                            if audio_url:
-                                print("Playing voice response with FFT analysis...")
-                                success = utils.play_audio_from_url(audio_url, ha_client.host, self.animation_server)
-                                if not success:
-                                    logger.warning("Failed to play response audio")
-
-                            if continue_on_question and response.rstrip().endswith("?"):
-                                logger.info("Response ends with '?' - continuing conversation")
-                                self.animation_server.change_state("listening")
-                                utils.play_feedback_sound("activation")
-                                keep_listening = True
-                            else:
-                                await asyncio.sleep(3)
-                                self.animation_server.change_state("hidden")
-                                utils.play_feedback_sound("deactivation")
-                        else:
-                            print("\nNo response from assistant or processing error.")
-                            self.animation_server.change_state("error", "Assistant did not respond")
-                            await asyncio.sleep(5)
-                            self.animation_server.change_state("hidden")
-                            utils.play_feedback_sound("deactivation")
-                else:
-                    logger.error("Failed to record and send audio")
-                    self.animation_server.change_state("error", "Audio recording error")
-                    await asyncio.sleep(5)
-                    self.animation_server.change_state("hidden")
-                    utils.play_feedback_sound("deactivation")
-                
-        except asyncio.TimeoutError:
-            logger.error("Timeout during voice command processing")
-            self.animation_server.change_state("error", "Timeout - assistant not responding")
-            await asyncio.sleep(5)
-            self.animation_server.change_state("hidden")
-            utils.play_feedback_sound("deactivation")
-            
-        except Exception as e:
-            logger.exception(f"Error during processing: {str(e)}")
-            
-            error_msg = str(e)
-            if len(error_msg) > 80:
-                error_msg = error_msg[:77] + "..."
-            
-            self.animation_server.change_state("error", f"Error: {error_msg}")
-            await asyncio.sleep(5)
-            self.animation_server.change_state("hidden")
-            utils.play_feedback_sound("deactivation")
-        finally:
-            # Restore original volumes (prefer from HA client if available, fallback to local)
-            volumes_to_restore = ha_client.saved_volumes_for_restore if ha_client.saved_volumes_for_restore else saved_volumes
-            if volumes_to_restore and media_player_entities and ha_client.volumes_managed:
-                try:
-                    logger.info("Restoring original volumes")
-                    results = await ha_client.set_multiple_volumes(volumes_to_restore)
-                    logger.info(f"Restored volumes: {results}")
-                    ha_client.volumes_managed = False  # Reset flag
-                    ha_client.saved_volumes_for_restore = None  # Clear stored volumes
-                except Exception as e:
-                    logger.error(f"Error restoring volumes: {e}")
-                    ha_client.volumes_managed = False  # Reset flag even on error
-                    ha_client.saved_volumes_for_restore = None  # Clear stored volumes
-            
-            # Proper cleanup of temporary instances
-            logger.info("Cleaning up voice command session...")
-            
-            # Only close temporary instances if we created them (not self instances)
-            if audio_manager != self.audio_manager:
-                try:
-                    audio_manager.close_audio()
-                    logger.debug("Temp audio manager closed")
-                except Exception as e:
-                    logger.error(f"Error closing temp audio manager: {e}")
-                
-            if ha_client != self.ha_client:
-                try:
-                    await ha_client.close()
-                    logger.debug("Temp HA client closed")
-                except Exception as e:
-                    logger.error(f"Error closing temp HA client: {e}")
-            
-            logger.info("Voice command session cleanup completed")
-
     def on_voice_command_trigger(self):
         """Callback called when user activates voice command."""
-        if self.connection_mode == "esphome":
-            if self.satellite_server:
-                self.satellite_server.start_conversation()
-            else:
-                logger.warning("ESPHome mode: satellite server not running")
-            return
-
-        if self.animation_server.current_state != "hidden":
-            logger.info("Application is busy, ignoring trigger")
-            return
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        def run_async():
-            loop.run_until_complete(self.process_voice_command())
-
-        thread = threading.Thread(target=run_async, daemon=True)
-        thread.start()
+        if self.satellite_server:
+            self.satellite_server.start_conversation()
+        else:
+            logger.warning("ESPHome mode: satellite server not running")
     
     def hide_from_taskbar(self):
         """No-op — Flet overlay uses skip_task_bar natively."""
@@ -885,33 +589,11 @@ class HAAssistApp:
                 logger.error(f"❌ Failed to initialize audio manager: {e}")
                 self.audio_manager = None
 
-            if self.connection_mode == "esphome":
-                logger.info("Connection mode: ESPHome satellite")
-            else:
-                logger.info("Connection mode: WebSocket API")
-                # Initialize HA client only for WebSocket mode
-                try:
-                    self.ha_client = HomeAssistantClient()
-                    logger.info("✅ HA client initialized")
-                except Exception as e:
-                    logger.error(f"❌ Failed to initialize HA client: {e}")
-                    self.ha_client = None
-
+            logger.info("Connection mode: ESPHome satellite")
             self.setup_animation_server()
 
-            # Setup conversation system (WebSocket mode only)
-            if self.connection_mode != "esphome" and self.ha_client and self.audio_manager:
-                if self.setup_conversation_manager():
-                    # Pass app reference to conversation manager
-                    self.conversation_manager._app_instance = self
-                    self.setup_prompt_server()
-                else:
-                    logger.warning("Failed to setup conversation manager")
-            elif self.connection_mode != "esphome":
-                logger.warning("HA client or audio manager not initialized - conversation features disabled")
-            
             # Start ESPHome satellite server after animation server is ready
-            if self.connection_mode == "esphome" and self.audio_manager:
+            if self.audio_manager:
                 self._start_esphome_mode()
 
             self.setup_hotkey()
@@ -994,47 +676,7 @@ class HAAssistApp:
             except Exception as e:
                 logger.error(f"Error stopping satellite server: {e}")
         
-        # Stop prompt server
-        if hasattr(self, 'prompt_server') and self.prompt_server:
-            try:
-                self.prompt_server.stop()
-                logger.info("Prompt server stopped")
-            except Exception as e:
-                logger.error(f"Error stopping prompt server: {e}")
-        
-        # Cancel any active conversations
-        if hasattr(self, 'conversation_manager') and self.conversation_manager:
-            try:
-                self.conversation_manager.cancel_conversation()
-                logger.info("Active conversations cancelled")
-            except Exception as e:
-                logger.error(f"Error cancelling conversations: {e}")
 
-        # Close HA client connection if exists
-        if hasattr(self, 'ha_client') and self.ha_client:
-            try:
-                # Run close in asyncio loop if one exists
-                loop = None
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    # No running loop, create a new one
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
-                if loop and not loop.is_closed():
-                    if loop.is_running():
-                        # Schedule close for later
-                        asyncio.create_task(self.ha_client.close())
-                    else:
-                        # Run close synchronously
-                        loop.run_until_complete(self.ha_client.close())
-                        
-                self.ha_client = None
-                logger.info("HA Client connection closed")
-                
-            except Exception as e:
-                logger.error(f"Error closing HA client: {e}")
 
         # Stop animation server
         if self.animation_server:
@@ -1043,6 +685,16 @@ class HAAssistApp:
                 logger.info("Animation server stopped")
             except Exception as e:
                 logger.error(f"Error stopping animation server: {e}")
+        
+        # Stop background flet processes
+        try:
+            import subprocess
+            import sys
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/F", "/IM", "flet.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logger.info("Flet client processes terminated")
+        except Exception as e:
+            logger.debug(f"Error terminating flet processes: {e}")
         
         # Close audio manager
         if self.audio_manager:
@@ -1094,17 +746,14 @@ def validate_configuration():
     """Validate application configuration and return list of issues."""
     issues = []
 
-    connection_mode = utils.get_env("CONNECTION_MODE", "websocket").lower()
+    host = utils.get_env("HA_HOST")
+    token = utils.get_env("HA_TOKEN")
 
-    if connection_mode == "websocket":
-        host = utils.get_env("HA_HOST")
-        token = utils.get_env("HA_TOKEN")
+    if not host:
+        issues.append("Missing Home Assistant server address (HA_HOST) - required for TTS playback and volume ducking")
 
-        if not host:
-            issues.append("Missing Home Assistant server address (HA_HOST)")
-
-        if not token:
-            issues.append("Missing access token (HA_TOKEN)")
+    if not token:
+        issues.append("Missing Home Assistant access token (HA_TOKEN) - required for volume ducking")
     
     sample_rate = utils.get_env("HA_SAMPLE_RATE", 16000, int)
     if sample_rate not in [8000, 16000, 22050, 44100, 48000]:

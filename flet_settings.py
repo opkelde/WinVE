@@ -436,7 +436,7 @@ class FletSettingsApp:
                             ft.Divider(),
                             self.continue_on_question_switch,
                             ft.Text(
-                                "Works in both WebSocket and ESPHome mode. Workaround for integrations that don't "
+                                "Workaround for integrations that don't "
                                 "send continue_conversation=1 (e.g. Claude/Anthropic).",
                                 color=ft.Colors.GREY_600, size=12
                             ),

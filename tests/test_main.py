@@ -66,33 +66,11 @@ class TestHAAssistApp:
                  patch('main.WakeWordDetector'):
                 
                 app = main.HAAssistApp()
-                app.connection_mode = "websocket"
-                app.animation_server = Mock()
-                app.animation_server.current_state = "hidden"
+                app.satellite_server = Mock()
                 
-                with patch.object(app, 'on_voice_command_trigger') as mock_trigger:
-                    app.on_wake_word_detected("alexa", 0.7)
-                    
-                    mock_trigger.assert_called_once()
-    
-    def test_on_wake_word_detected_busy(self):
-        """Test wake word detection when app is busy."""
-        with patch.dict('os.environ', {
-            'HA_HOST': 'localhost:8123',
-            'HA_TOKEN': 'test_token'
-        }):
-            with patch('main.platform.system', return_value="Windows"), \
-                 patch('main.WakeWordDetector'):
+                app.on_wake_word_detected("alexa", 0.7)
                 
-                app = main.HAAssistApp()
-                app.connection_mode = "websocket"
-                app.animation_server = Mock()
-                app.animation_server.current_state = "listening"
-                
-                with patch.object(app, 'on_voice_command_trigger') as mock_trigger:
-                    app.on_wake_word_detected("alexa", 0.7)
-                    
-                    mock_trigger.assert_not_called()
+                app.satellite_server.wakeup.assert_called_once()
     
     @patch('main.platform.system')
     @patch('main.get_icon_path')
@@ -412,9 +390,8 @@ class TestHAAssistApp:
                 
                 assert result is False
     
-    @patch('main.threading.Thread')
-    def test_on_voice_command_trigger_idle(self, mock_thread):
-        """Test voice command trigger when idle."""
+    def test_on_voice_command_trigger(self):
+        """Test voice command trigger calling satellite server."""
         with patch.dict('os.environ', {
             'HA_HOST': 'localhost:8123',
             'HA_TOKEN': 'test_token'
@@ -423,36 +400,11 @@ class TestHAAssistApp:
                  patch('main.WakeWordDetector'):
                 
                 app = main.HAAssistApp()
-                app.connection_mode = "websocket"
-                app.animation_server = Mock()
-                app.animation_server.current_state = "hidden"
-                
-                mock_thread_instance = Mock()
-                mock_thread.return_value = mock_thread_instance
+                app.satellite_server = Mock()
                 
                 app.on_voice_command_trigger()
                 
-                mock_thread.assert_called_once()
-                mock_thread_instance.start.assert_called_once()
-    
-    def test_on_voice_command_trigger_busy(self):
-        """Test voice command trigger when busy."""
-        with patch.dict('os.environ', {
-            'HA_HOST': 'localhost:8123',
-            'HA_TOKEN': 'test_token'
-        }):
-            with patch('main.platform.system', return_value="Windows"), \
-                 patch('main.WakeWordDetector'):
-                
-                app = main.HAAssistApp()
-                app.connection_mode = "websocket"
-                app.animation_server = Mock()
-                app.animation_server.current_state = "listening"
-                
-                with patch('main.threading.Thread') as mock_thread:
-                    app.on_voice_command_trigger()
-                    
-                    mock_thread.assert_not_called()
+                app.satellite_server.start_conversation.assert_called_once()
     
     def test_cleanup_success(self):
         """Test successful cleanup."""

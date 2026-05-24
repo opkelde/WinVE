@@ -167,10 +167,12 @@ def run_overlay(port=8765):
                     ),
                     alignment=ft.alignment.bottom_center,
                     padding=ft.padding.only(bottom=60),
-                    width=w,
-                    height=h,
+                    left=0,
+                    top=0,
+                    right=0,
+                    bottom=0,
                 ),
-            ], width=w, height=h)
+            ], expand=True)
         )
 
         # --- Audio processing (same algo as old index.html) ---

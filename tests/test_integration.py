@@ -14,78 +14,7 @@ from unittest.mock import Mock, patch, AsyncMock, MagicMock
 class TestVoiceCommandIntegration:
     """Integration tests for voice command processing."""
     
-    @pytest.mark.asyncio
-    async def test_complete_voice_command_flow(self):
-        """Test complete voice command flow from audio to response."""
-        from main import HAAssistApp
-        from client import HomeAssistantClient
-        from audio import AudioManager
-        from animation_server import AnimationServer
-        
-        # Mock external dependencies
-        with patch('pyaudio.PyAudio') as mock_pyaudio, \
-             patch('websockets.connect') as mock_ws_connect, \
-             patch('webview.create_window') as mock_webview, \
-             patch('pystray.Icon') as mock_tray:
-            
-            # Setup mocks
-            mock_audio = Mock()
-            mock_pyaudio.return_value = mock_audio
-            mock_audio.get_device_count.return_value = 1
-            mock_audio.get_device_info_by_index.return_value = {
-                'name': 'Test Microphone',
-                'maxInputChannels': 1,
-                'defaultSampleRate': 16000
-            }
-            mock_audio.open.return_value = Mock()
-            
-            mock_ws = AsyncMock()
-            async def mock_connect_coro(*args, **kwargs):
-                return mock_ws
-            mock_ws_connect.side_effect = mock_connect_coro
 
-            # The recv() sequence that client.py consumes:
-            # 1. connect() reads auth_required
-            # 2. connect() reads auth_ok
-            # 3. fetch_available_pipelines() reads pipeline list result
-            # 4. start_assist_pipeline() reads run-start event (with stt_binary_handler_id)
-            # 5. receive_response() reads stt-end, intent-end, run-end events
-            mock_ws.recv.side_effect = [
-                '{"type": "auth_required"}',
-                '{"type": "auth_ok"}',
-                json.dumps({"id": 1, "type": "result", "success": True, "result": {"pipelines": []}}),
-                json.dumps({"type": "event", "event": {"type": "run-start", "data": {"runner_data": {"stt_binary_handler_id": 1}}}}),
-                json.dumps({"type": "event", "event": {"type": "stt-end", "data": {"stt_output": {"text": "turn on lights"}}}}),
-                json.dumps({"type": "event", "event": {"type": "intent-end", "data": {"intent_output": {"response": {"speech": {"plain": {"speech": "Lights turned on"}}}}}}}),
-                json.dumps({"type": "event", "event": {"type": "run-end"}}),
-            ]
-            
-            # Create app instance
-            with patch.dict('os.environ', {
-                'HA_HOST': 'localhost:8123',
-                'HA_TOKEN': 'test_token',
-                'HA_ANIMATIONS_ENABLED': 'false',
-                'HA_WAKE_WORD_ENABLED': 'false'
-            }):
-                app = HAAssistApp()
-                
-                # Mock audio recording to simulate successful speech capture
-                async def fake_record(on_chunk_cb, on_end_cb=None):
-                    if on_end_cb:
-                        await on_end_cb()
-                    return True
-
-                with patch.object(app, 'animation_server') as mock_anim_server:
-                    mock_anim_server.current_state = "hidden"
-                    
-                    with patch.object(AudioManager, 'record_audio', side_effect=fake_record):
-                        # Test voice command processing
-                        await app.process_voice_command()
-                    
-                    # Verify state changes
-                    state_calls = [call[0][0] for call in mock_anim_server.change_state.call_args_list]
-                    assert "listening" in state_calls
-                    assert "processing" in state_calls
     
     @pytest.mark.asyncio
     async def test_wake_word_to_voice_command(self):
@@ -352,36 +281,7 @@ class TestConfigurationIntegration:
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across modules."""
     
-    @pytest.mark.asyncio
-    async def test_connection_error_handling(self):
-        """Test connection error handling throughout the system."""
-        from main import HAAssistApp
-        
-        with patch.dict('os.environ', {
-            'HA_HOST': 'nonexistent:8123',
-            'HA_TOKEN': 'invalid_token',
-            'HA_ANIMATIONS_ENABLED': 'false',
-            'HA_WAKE_WORD_ENABLED': 'false'
-        }):
-            with patch('websockets.connect') as mock_connect, \
-                 patch('webview.create_window'), \
-                 patch('pystray.Icon'):
-                
-                # Mock connection failure
-                mock_connect.side_effect = Exception("Connection failed")
-                
-                app = HAAssistApp()
-                
-                with patch.object(app, 'animation_server') as mock_anim_server:
-                    mock_anim_server.current_state = "hidden"
-                    
-                    # Should handle connection error gracefully
-                    await app.process_voice_command()
-                    
-                    # Should show error state
-                    error_calls = [call for call in mock_anim_server.change_state.call_args_list 
-                                 if call[0][0] == "error"]
-                    assert len(error_calls) > 0
+
     
     def test_audio_error_handling(self):
         """Test audio error handling."""
