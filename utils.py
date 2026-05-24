@@ -490,7 +490,7 @@ def play_feedback_sound(sound_name):
     Args:
         sound_name: Sound name ('activation' or 'deactivation')
     """
-    sound_enabled = get_env('HA_SOUND_FEEDBACK', 'true')
+    sound_enabled = get_env('HA_SOUND_FEEDBACK', 'false')
     if sound_enabled.lower() not in ('true', '1', 'yes', 'y', 't'):
         return False
     

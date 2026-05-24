@@ -99,13 +99,14 @@ class FletSettingsApp:
             'HA_HOTKEY': utils.get_env('HA_HOTKEY', 'ctrl+shift+h'),
             'HA_VAD_MODE': utils.get_env('HA_VAD_MODE', 3, int),
             'HA_SILENCE_THRESHOLD_SEC': utils.get_env('HA_SILENCE_THRESHOLD_SEC', 0.8, float),
-            'HA_SOUND_FEEDBACK': utils.get_env('HA_SOUND_FEEDBACK', 'true'),
+            'HA_SOUND_FEEDBACK': utils.get_env('HA_SOUND_FEEDBACK', 'false'),
             'HA_MICROPHONE_INDEX': utils.get_env('HA_MICROPHONE_INDEX', -1, int),
             'HA_OUTPUT_DEVICE_INDEX': utils.get_env('HA_OUTPUT_DEVICE_INDEX', -1, int),
             'HA_OUTPUT_SAMPLE_RATE': utils.get_env('HA_OUTPUT_SAMPLE_RATE', '-1'),
             'DEBUG': utils.get_env('DEBUG', 'false'),
             'HA_ANIMATIONS_ENABLED': utils.get_env('HA_ANIMATIONS_ENABLED', 'true'),
             'HA_RESPONSE_TEXT_ENABLED': utils.get_env('HA_RESPONSE_TEXT_ENABLED', 'true'),
+            'HA_SHOW_LISTENING_INDICATOR': utils.get_env('HA_SHOW_LISTENING_INDICATOR', 'true'),
             'HA_SAMPLE_RATE': utils.get_env('HA_SAMPLE_RATE', '16000'),
             'HA_FRAME_DURATION_MS': utils.get_env('HA_FRAME_DURATION_MS', '30'),
             'ANIMATION_PORT': utils.get_env('ANIMATION_PORT', '8765'),
@@ -842,6 +843,12 @@ class FletSettingsApp:
             value=current_settings['HA_RESPONSE_TEXT_ENABLED'] == 'true', 
             active_color=ft.Colors.BLUE_600
         )
+
+        self.listening_indicator_switch = ft.Switch(
+            label="Show text listening indicator on screen",
+            value=current_settings['HA_SHOW_LISTENING_INDICATOR'] == 'true',
+            active_color=ft.Colors.BLUE_600
+        )
         
         # Debug mode
         self.debug_switch = ft.Switch(
@@ -908,6 +915,10 @@ class FletSettingsApp:
                             ft.Container(height=10),
                             self.response_text_switch,
                             ft.Text("Display assistant responses as animated text overlay.",
+                                   color=ft.Colors.GREY_600, size=12),
+                            ft.Container(height=10),
+                            self.listening_indicator_switch,
+                            ft.Text("Display 'Listening...' when assistant is activated.",
                                    color=ft.Colors.GREY_600, size=12)
                         ]),
                         padding=20
@@ -1773,6 +1784,7 @@ class FletSettingsApp:
                 'DEBUG': 'true' if self.debug_switch.value else 'false',
                 'HA_ANIMATIONS_ENABLED': 'true' if self.animations_switch.value else 'false',
                 'HA_RESPONSE_TEXT_ENABLED': 'true' if self.response_text_switch.value else 'false',
+                'HA_SHOW_LISTENING_INDICATOR': 'true' if self.listening_indicator_switch.value else 'false',
                 'HA_SAMPLE_RATE': self.sample_rate_dropdown.value,
                 'HA_OUTPUT_SAMPLE_RATE': self.output_sample_rate_dropdown.value,
                 'HA_FRAME_DURATION_MS': self.frame_duration_dropdown.value,
@@ -1858,6 +1870,7 @@ class FletSettingsApp:
             env_content += "\n# === INTERFACE & PERFORMANCE ===\n"
             env_content += f"HA_ANIMATIONS_ENABLED={settings['HA_ANIMATIONS_ENABLED']}\n"
             env_content += f"HA_RESPONSE_TEXT_ENABLED={settings['HA_RESPONSE_TEXT_ENABLED']}\n"
+            env_content += f"HA_SHOW_LISTENING_INDICATOR={settings['HA_SHOW_LISTENING_INDICATOR']}\n"
 
             env_content += "\n# === NETWORK ===\n"
             env_content += f"ANIMATION_PORT={settings['ANIMATION_PORT']}\n"

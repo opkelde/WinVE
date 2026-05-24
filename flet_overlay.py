@@ -7,10 +7,32 @@ import flet.canvas as cv
 import asyncio
 import json
 import math
-import logging
 import ctypes
+import os
+import logging
+from dotenv import load_dotenv
 
 logger = logging.getLogger('haassist')
+
+def get_env_bool(key, default=False):
+    """Get environment variable as boolean with safe parsing from .env without loading utils."""
+    try:
+        import sys
+        if getattr(sys, 'frozen', False):
+            env_path = os.path.join(os.path.dirname(sys.executable), '.env')
+        else:
+            env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+        
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            
+        value = os.getenv(key)
+        if value is None:
+            return default
+            
+        return value.lower() in ('true', '1', 'yes', 'y', 't')
+    except Exception:
+        return default
 
 # State color palettes (same as old index.html)
 STATE_COLORS = {
@@ -255,6 +277,13 @@ def run_overlay(port=8765):
                 success_text.color = '#ffeb3b'
                 success_card.border = ft.border.all(1, ft.Colors.with_opacity(0.35, '#ffeb3b'))
                 success_card.visible = True
+
+            if new_state == 'listening':
+                if get_env_bool('HA_SHOW_LISTENING_INDICATOR', True):
+                    response_text_ctrl.value = "Listening..."
+                    response_card.visible = True
+            elif new_state != 'responding' and response_text_ctrl.value == "Listening...":
+                response_card.visible = False
 
             page.update()
 

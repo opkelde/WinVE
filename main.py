@@ -767,7 +767,7 @@ def validate_configuration():
     if vad_mode < 0 or vad_mode > 3:
         issues.append(f"Invalid VAD mode: {vad_mode} (allowed: 0-3)")
 
-    sound_feedback = utils.get_env('HA_SOUND_FEEDBACK', 'true')
+    sound_feedback = utils.get_env('HA_SOUND_FEEDBACK', 'false')
     if sound_feedback.lower() in ('true', '1', 'yes', 'y', 't'):
         sound_dir = os.path.join(os.path.dirname(__file__), 'sound')
         activation_sound = os.path.join(sound_dir, 'activation.wav')
@@ -876,7 +876,7 @@ def main():
         'HA_PIPELINE_ID': utils.get_env('HA_PIPELINE_ID', '(default)'),
         'HA_HOTKEY': utils.get_env('HA_HOTKEY', 'ctrl+shift+h'),
         'HA_VAD_MODE': utils.get_env('HA_VAD_MODE', '3'),
-        'HA_SOUND_FEEDBACK': utils.get_env('HA_SOUND_FEEDBACK', 'true'),
+        'HA_SOUND_FEEDBACK': utils.get_env('HA_SOUND_FEEDBACK', 'false'),
         'HA_WAKE_WORD_ENABLED': utils.get_env('HA_WAKE_WORD_ENABLED', 'true'),
         'DEBUG': utils.get_env('DEBUG', 'false')
     }
