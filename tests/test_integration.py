@@ -1,8 +1,9 @@
 """
-Integration tests for GLaSSIST Desktop Voice Assistant.
+Integration tests for WinVE Desktop Voice Assistant.
 """
 import pytest
 import asyncio
+import json
 import tempfile
 import os
 import threading
@@ -16,7 +17,6 @@ class TestVoiceCommandIntegration:
     @pytest.mark.asyncio
     async def test_complete_voice_command_flow(self):
         """Test complete voice command flow from audio to response."""
-        # Import main components
         from main import HAAssistApp
         from client import HomeAssistantClient
         from audio import AudioManager
@@ -40,14 +40,24 @@ class TestVoiceCommandIntegration:
             mock_audio.open.return_value = Mock()
             
             mock_ws = AsyncMock()
-            mock_ws_connect.return_value = mock_ws
+            async def mock_connect_coro(*args, **kwargs):
+                return mock_ws
+            mock_ws_connect.side_effect = mock_connect_coro
+
+            # The recv() sequence that client.py consumes:
+            # 1. connect() reads auth_required
+            # 2. connect() reads auth_ok
+            # 3. fetch_available_pipelines() reads pipeline list result
+            # 4. start_assist_pipeline() reads run-start event (with stt_binary_handler_id)
+            # 5. receive_response() reads stt-end, intent-end, run-end events
             mock_ws.recv.side_effect = [
                 '{"type": "auth_required"}',
                 '{"type": "auth_ok"}',
-                '{"type": "result", "success": true, "result": {"pipelines": []}}',
-                '{"type": "result", "success": true, "result": {}}',
-                '{"type": "event", "event": {"type": "stt-end", "data": {"stt_output": {"text": "turn on lights"}}}}',
-                '{"type": "event", "event": {"type": "intent-end", "data": {"intent_output": {"response": {"speech": {"plain": {"speech": "Lights turned on"}}}}}}}'
+                json.dumps({"id": 1, "type": "result", "success": True, "result": {"pipelines": []}}),
+                json.dumps({"type": "event", "event": {"type": "run-start", "data": {"runner_data": {"stt_binary_handler_id": 1}}}}),
+                json.dumps({"type": "event", "event": {"type": "stt-end", "data": {"stt_output": {"text": "turn on lights"}}}}),
+                json.dumps({"type": "event", "event": {"type": "intent-end", "data": {"intent_output": {"response": {"speech": {"plain": {"speech": "Lights turned on"}}}}}}}),
+                json.dumps({"type": "event", "event": {"type": "run-end"}}),
             ]
             
             # Create app instance
@@ -59,15 +69,20 @@ class TestVoiceCommandIntegration:
             }):
                 app = HAAssistApp()
                 
-                # Mock audio recording
+                # Mock audio recording to simulate successful speech capture
+                async def fake_record(on_chunk_cb, on_end_cb=None):
+                    if on_end_cb:
+                        await on_end_cb()
+                    return True
+
                 with patch.object(app, 'animation_server') as mock_anim_server:
                     mock_anim_server.current_state = "hidden"
                     
-                    # Test voice command processing
-                    await app.process_voice_command()
+                    with patch.object(AudioManager, 'record_audio', side_effect=fake_record):
+                        # Test voice command processing
+                        await app.process_voice_command()
                     
                     # Verify state changes
-                    assert mock_anim_server.change_state.call_count >= 2
                     state_calls = [call[0][0] for call in mock_anim_server.change_state.call_args_list]
                     assert "listening" in state_calls
                     assert "processing" in state_calls
@@ -106,14 +121,13 @@ class TestVoiceCommandIntegration:
                 mock_audio.open.return_value = Mock()
                 
                 app = HAAssistApp()
+                app.satellite_server = Mock()
                 
-                # Mock voice command processing
-                with patch.object(app, 'on_voice_command_trigger') as mock_trigger:
-                    # Simulate wake word detection
-                    app.on_wake_word_detected('alexa', 0.7)
-                    
-                    # Should trigger voice command
-                    mock_trigger.assert_called_once()
+                # Simulate wake word detection
+                app.on_wake_word_detected('alexa', 0.7)
+                
+                # Should trigger satellite server wakeup
+                app.satellite_server.wakeup.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_animation_server_client_communication(self):

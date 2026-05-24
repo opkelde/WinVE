@@ -13,7 +13,15 @@ import soundfile as sf
 import numpy as np
 import io
 
-load_dotenv()
+def get_env_path():
+    """Get the standard path for the .env file in the application directory."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), '.env')
+    else:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+
+load_dotenv(get_env_path())
 
 def safe_print(text):
     """
@@ -35,8 +43,23 @@ def setup_logger():
     
     class FlushHandler(logging.StreamHandler):
         def emit(self, record):
-            super().emit(record)
-            self.flush()
+            try:
+                super().emit(record)
+            except UnicodeEncodeError:
+                try:
+                    msg = self.format(record)
+                    # Use the stream's encoding if available, fallback to ascii with 'replace'
+                    encoding = getattr(self.stream, 'encoding', 'ascii') or 'ascii'
+                    safe_msg = msg.encode(encoding, errors='replace').decode(encoding)
+                    self.stream.write(safe_msg + self.terminator)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            try:
+                self.flush()
+            except Exception:
+                pass
     
     handlers = [FlushHandler(sys.stdout)]
     
@@ -47,7 +70,7 @@ def setup_logger():
             log_dir = os.path.join(os.path.dirname(__file__), 'logs')
             os.makedirs(log_dir, exist_ok=True)
             
-            log_file = os.path.join(log_dir, f'glasssist_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+            log_file = os.path.join(log_dir, f'winve_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
             file_handler = logging.FileHandler(log_file, encoding='utf-8')
             file_handler.setFormatter(logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -102,11 +125,12 @@ def get_env(key, default=None, as_type=str):
 
 def _read_from_env_file(key):
     """Read value directly from .env file."""
-    possible_paths = [
-        os.path.join(os.path.dirname(__file__), '.env'),
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'),
-        '.env'
-    ]
+    # Use canonical path first (handles frozen/compiled mode correctly)
+    primary = get_env_path()
+    possible_paths = [primary]
+    for fb in [os.path.join(os.path.dirname(__file__), '.env'), '.env']:
+        if os.path.abspath(fb) != os.path.abspath(primary):
+            possible_paths.append(fb)
     
     for path in possible_paths:
         if os.path.exists(path):
@@ -119,7 +143,14 @@ def _read_from_env_file(key):
                             if len(parts) == 2:
                                 env_key, env_value = parts
                                 if env_key.strip() == key:
-                                    return env_value.strip()
+                                    val = env_value.strip()
+                                    # Strip surrounding quotes
+                                    if len(val) >= 2 and (
+                                        (val[0] == '"' and val[-1] == '"') or
+                                        (val[0] == "'" and val[-1] == "'")
+                                    ):
+                                        val = val[1:-1]
+                                    return val
             except Exception as e:
                 logger.warning(f"Error reading .env file: {e}")
     
@@ -424,14 +455,33 @@ def validate_audio_format(sample_rate, channels=1):
     """Validate audio parameters."""
     valid_rates = [8000, 16000, 22050, 44100, 48000]
     if sample_rate not in valid_rates:
-        logger = setup_logger()
-        logger.warning(f"Unusual sample rate: {sample_rate}Hz")
+        raise ValueError(f"Unsupported sample rate: {sample_rate}Hz")
     
     if channels not in [1, 2]:
-        logger = setup_logger()
-        logger.warning(f"Unusual channel count: {channels}")
+        raise ValueError(f"Unsupported number of channels: {channels}")
     
     return True
+
+def convert_audio_chunk_to_float32(audio_chunk):
+    """
+    Convert raw 16-bit PCM audio bytes to float32 array normalized to [-1, 1].
+    
+    Args:
+        audio_chunk: Raw audio bytes or array-like
+        
+    Returns:
+        numpy.ndarray: Float32 audio array
+    """
+    if not audio_chunk:
+        return np.array([], dtype=np.float32)
+    
+    if isinstance(audio_chunk, bytes):
+        return np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
+    elif isinstance(audio_chunk, np.ndarray):
+        if audio_chunk.dtype == np.int16:
+            return audio_chunk.astype(np.float32) / 32768.0
+        return audio_chunk.astype(np.float32)
+    return np.array(audio_chunk, dtype=np.float32)
 
 def play_feedback_sound(sound_name):
     """

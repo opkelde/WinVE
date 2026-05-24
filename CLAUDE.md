@@ -6,23 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Running the Application
 ```bash
-python main.py                    # Run the main application
+py main.py                        # Run the main application
 ```
 
 ### Testing
 ```bash
-python tests/run_tests.py         # Run all tests with comprehensive test runner
-python tests/run_tests.py --unit-only        # Run only unit tests
-python tests/run_tests.py --integration-only # Run only integration tests  
-python tests/run_tests.py --coverage         # Run with coverage report
-python tests/run_tests.py --parallel         # Run tests in parallel
-python tests/run_tests.py --html             # Generate HTML report
-python tests/run_tests.py --test-file test_utils.py  # Run specific test file
+py tests/run_tests.py             # Run all tests with comprehensive test runner
+py tests/run_tests.py --unit-only            # Run only unit tests
+py tests/run_tests.py --integration-only     # Run only integration tests  
+py tests/run_tests.py --coverage             # Run with coverage report
+py tests/run_tests.py --parallel             # Run tests in parallel
+py tests/run_tests.py --html                 # Generate HTML report
+py tests/run_tests.py --test-file test_utils.py  # Run specific test file
 
 # Individual test modules
-python -m pytest tests/test_utils.py -v
-python -m pytest tests/test_audio.py -v
-python -m pytest tests/test_client.py -v
+py -m pytest -c tests/pytest.ini tests/test_utils.py -v
+py -m pytest -c tests/pytest.ini tests/test_audio.py -v
+py -m pytest -c tests/pytest.ini tests/test_client.py -v
 ```
 
 ### Building (Windows)
@@ -39,7 +39,7 @@ pip install -r tests/requirements-test.txt  # Install test dependencies
 
 ## Architecture Overview
 
-GLaSSIST is a desktop voice assistant for Home Assistant with the following key architectural components:
+WinVE is a desktop voice assistant for Home Assistant with the following key architectural components:
 
 ### Core Components
 - **main.py** - Application entry point with HAAssistApp class, handles GUI lifecycle, tray integration, and component orchestration
@@ -51,11 +51,11 @@ GLaSSIST is a desktop voice assistant for Home Assistant with the following key 
 ### Supporting Modules
 - **vad.py** - Voice Activity Detection using WebRTC VAD for smart speech detection
 - **utils.py** - Shared utilities for configuration, logging, and audio validation
-- **platform_utils.py** - Platform-specific functionality for Windows/Linux compatibility
-- **improved_settings_dialog.py** - Settings GUI for configuration management
+- **platform_utils.py** - Platform-specific functionality for Windows (Linux support has been removed)
+- **flet_settings.py** - Settings GUI for configuration management
 
 ### Frontend Integration
-- **frontend/index.html** - Three.js-based visual interface with WebGL shaders and FFT audio analysis
+- **frontend/index.html** - Siri-style CSS conic-gradient border overlay visual interface with FFT audio analysis
 - **sound/** - Audio feedback files (activation.wav, deactivation.wav)
 - **models/** - OpenWakeWord ONNX model files for wake word detection
 
@@ -65,7 +65,7 @@ GLaSSIST is a desktop voice assistant for Home Assistant with the following key 
 
 **Component Lifecycle**: Main app orchestrates initialization order: audio setup → Home Assistant connection → animation server → wake word detection → tray integration.
 
-**Cross-Platform Design**: Platform detection in main.py enables Windows/Linux compatibility with platform-specific dependency checking.
+**Windows Native Design**: The application is tailored specifically for Windows desktop environments, removing Linux-specific paths.
 
 **Audio Pipeline**: Audio flows from microphone → VAD → wake word detection → Home Assistant STT → TTS response playback, with parallel animation updates.
 
@@ -81,7 +81,7 @@ GLaSSIST is a desktop voice assistant for Home Assistant with the following key 
 ### Animation System
 - Animations can be disabled via `HA_ANIMATIONS_ENABLED=false` to use DummyAnimationServer
 - WebSocket communication on port 8765 (configurable via `ANIMATION_PORT`)
-- Real-time audio visualization using FFT analysis in Three.js frontend
+- Real-time audio visualization using FFT analysis in the frontend overlay
 
 ### Audio Configuration
 - WebRTC VAD with configurable sensitivity (HA_VAD_MODE: 0-3)

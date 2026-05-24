@@ -39,7 +39,9 @@ class TestHomeAssistantClient:
         """Test successful WebSocket connection."""
         # Mock WebSocket
         mock_ws = AsyncMock()
-        mock_connect.return_value = mock_ws
+        async def mock_connect_coro(*args, **kwargs):
+            return mock_ws
+        mock_connect.side_effect = mock_connect_coro
         
         # Mock authentication flow
         mock_ws.recv.side_effect = [
@@ -48,19 +50,19 @@ class TestHomeAssistantClient:
         ]
         
         ha_client = client.HomeAssistantClient()
+        ha_client.fetch_available_pipelines = AsyncMock()
         
-        with patch.object(ha_client, 'fetch_available_pipelines', return_value=None):
-            result = await ha_client.connect()
-            
-            assert result is True
-            assert ha_client.connected is True
-            assert ha_client.websocket == mock_ws
-            
-            # Verify authentication messages
-            mock_ws.send.assert_called_once()
-            sent_message = json.loads(mock_ws.send.call_args[0][0])
-            assert sent_message["type"] == "auth"
-            assert sent_message["access_token"] == ha_client.token
+        result = await ha_client.connect()
+        
+        assert result is True
+        assert ha_client.connected is True
+        assert ha_client.websocket == mock_ws
+        
+        # Verify authentication messages
+        mock_ws.send.assert_called_once()
+        sent_message = json.loads(mock_ws.send.call_args[0][0])
+        assert sent_message["type"] == "auth"
+        assert sent_message["access_token"] == ha_client.token
     
     @patch('websockets.connect')
     async def test_connect_timeout(self, mock_connect):
@@ -77,7 +79,9 @@ class TestHomeAssistantClient:
     async def test_connect_auth_failed(self, mock_connect):
         """Test connection with authentication failure."""
         mock_ws = AsyncMock()
-        mock_connect.return_value = mock_ws
+        async def mock_connect_coro(*args, **kwargs):
+            return mock_ws
+        mock_connect.side_effect = mock_connect_coro
         
         # Mock authentication failure
         mock_ws.recv.side_effect = [
@@ -95,7 +99,9 @@ class TestHomeAssistantClient:
     async def test_connect_unexpected_message(self, mock_connect):
         """Test connection with unexpected initial message."""
         mock_ws = AsyncMock()
-        mock_connect.return_value = mock_ws
+        async def mock_connect_coro(*args, **kwargs):
+            return mock_ws
+        mock_connect.side_effect = mock_connect_coro
         
         # Mock unexpected message
         mock_ws.recv.return_value = json.dumps({"type": "unexpected"})
@@ -221,8 +227,23 @@ class TestHomeAssistantClient:
             "success": True,
             "result": {}
         }
+        event_response = {
+            "id": 1,
+            "type": "event",
+            "event": {
+                "type": "run-start",
+                "data": {
+                    "runner_data": {
+                        "stt_binary_handler_id": 123
+                    }
+                }
+            }
+        }
         
-        ha_client.websocket.recv.return_value = json.dumps(success_response)
+        ha_client.websocket.recv.side_effect = [
+            json.dumps(success_response),
+            json.dumps(event_response)
+        ]
         
         result = await ha_client.start_assist_pipeline()
         
@@ -248,8 +269,23 @@ class TestHomeAssistantClient:
             "success": True,
             "result": {}
         }
+        event_response = {
+            "id": 1,
+            "type": "event",
+            "event": {
+                "type": "run-start",
+                "data": {
+                    "runner_data": {
+                        "stt_binary_handler_id": 123
+                    }
+                }
+            }
+        }
         
-        ha_client.websocket.recv.return_value = json.dumps(success_response)
+        ha_client.websocket.recv.side_effect = [
+            json.dumps(success_response),
+            json.dumps(event_response)
+        ]
         
         result = await ha_client.start_assist_pipeline()
         
@@ -302,7 +338,7 @@ class TestHomeAssistantClient:
         result = await ha_client.send_audio_chunk(audio_data)
         
         assert result is True
-        ha_client.websocket.send.assert_called_once_with(audio_data)
+        ha_client.websocket.send.assert_called_once_with(bytearray([123]) + audio_data)
     
     async def test_send_audio_chunk_no_handler(self):
         """Test audio chunk sending without handler ID."""
@@ -339,7 +375,7 @@ class TestHomeAssistantClient:
         result = await ha_client.end_audio()
         
         assert result is True
-        ha_client.websocket.send.assert_called_once_with(b"")
+        ha_client.websocket.send.assert_called_once_with(bytearray([123]))
     
     async def test_end_audio_no_handler(self):
         """Test audio ending without handler ID."""
@@ -357,21 +393,19 @@ class TestHomeAssistantClient:
         ha_client = client.HomeAssistantClient()
         ha_client.websocket = AsyncMock()
         
-        # Mock response messages
+        # Mock response messages (reception ends on intent-end)
         responses = [
             {"type": "event", "event": {"type": "stt-end", "data": {"stt_output": {"text": "test"}}}},
-            {"type": "event", "event": {"type": "intent-end", "data": {"intent_output": {"response": {"speech": {"plain": {"speech": "response"}}}}}}},
-            {"type": "event", "event": {"type": "tts-end", "data": {"tts_output": {"url": "/api/tts/test.wav"}}}}
+            {"type": "event", "event": {"type": "intent-end", "data": {"intent_output": {"response": {"speech": {"plain": {"speech": "response"}}}}}}}
         ]
         
         ha_client.websocket.recv.side_effect = [json.dumps(resp) for resp in responses]
         
         results = await ha_client.receive_response()
         
-        assert len(results) == 3
+        assert len(results) == 2
         assert results[0]["type"] == "event"
         assert results[1]["type"] == "event"
-        assert results[2]["type"] == "event"
     
     async def test_receive_response_timeout(self):
         """Test response receiving with timeout."""
@@ -440,8 +474,17 @@ class TestHomeAssistantClient:
         ha_client = client.HomeAssistantClient()
         
         results = [
-            {"type": "event", "event": {"type": "intent-end", "data": {"intent_output": {"response": {"speech": {"plain": {"speech": "Hello"}}}}}}},
-            {"type": "event", "event": {"type": "tts-end", "data": {"tts_output": {"url": "/api/tts/test.wav"}}}}
+            {
+                "type": "event",
+                "event": {
+                    "type": "run-start",
+                    "data": {
+                        "tts_output": {
+                            "url": "/api/tts/test.wav"
+                        }
+                    }
+                }
+            }
         ]
         
         url = ha_client.extract_audio_url(results)
@@ -471,7 +514,7 @@ class TestHomeAssistantClient:
             success, message = await ha_client.test_connection()
             
             assert success is True
-            assert "Connection successful" in message
+            assert "Connection OK" in message
     
     async def test_test_connection_failure(self):
         """Test connection test failure."""
@@ -483,7 +526,7 @@ class TestHomeAssistantClient:
             success, message = await ha_client.test_connection()
             
             assert success is False
-            assert "Connection failed" in message
+            assert "Cannot establish connection" in message
     
     async def test_test_connection_exception(self):
         """Test connection test with exception."""
@@ -500,13 +543,14 @@ class TestHomeAssistantClient:
     async def test_close_success(self):
         """Test successful client cleanup."""
         ha_client = client.HomeAssistantClient()
-        ha_client.websocket = AsyncMock()
+        websocket = AsyncMock()
+        ha_client.websocket = websocket
         ha_client.connected = True
         
         await ha_client.close()
         
         assert ha_client.connected is False
-        ha_client.websocket.close.assert_called_once()
+        websocket.close.assert_called_once()
         assert ha_client.websocket is None
     
     async def test_close_no_websocket(self):

@@ -11,10 +11,10 @@ logger = utils.setup_logger()
 class HomeAssistantClient:
     """Enhanced Home Assistant client class with pipeline support."""
     
-    def __init__(self):
+    def __init__(self, host=None, token=None):
         """Initialize Home Assistant client."""
-        self.host = utils.get_env("HA_HOST", "localhost:8123")
-        self.token = utils.get_env("HA_TOKEN")
+        self.host = host or utils.get_env("HA_HOST", "localhost:8123")
+        self.token = token or utils.get_env("HA_TOKEN")
         self.pipeline_id = utils.get_env("HA_PIPELINE_ID")
         self.ai_agent_id = utils.get_env("HA_AI_AGENT_ID")
         self.sample_rate = utils.get_env("HA_SAMPLE_RATE", 16000, int)
@@ -34,16 +34,50 @@ class HomeAssistantClient:
         
     async def connect(self):
         """Establish WebSocket connection with Home Assistant."""
-        if self.host.startswith(('localhost', '127.0.0.1', '192.168.', '10.', '172.')):
+        host_clean = self.host.strip()
+        protocol = None
+        
+        # Check if protocol is specified in host string
+        if host_clean.startswith("ws://"):
             protocol = "ws"
-        else:
+            host_clean = host_clean[5:]
+        elif host_clean.startswith("wss://"):
             protocol = "wss"
-        uri = f"{protocol}://{self.host}/api/websocket"
+            host_clean = host_clean[6:]
+        elif host_clean.startswith("http://"):
+            protocol = "ws"
+            host_clean = host_clean[7:]
+        elif host_clean.startswith("https://"):
+            protocol = "wss"
+            host_clean = host_clean[8:]
+            
+        if not protocol:
+            # Fallback heuristic
+            if host_clean.startswith(('localhost', '127.0.0.1', '192.168.', '10.', '172.')) or ":8123" in host_clean:
+                protocol = "ws"
+            else:
+                protocol = "wss"
+                
+        uri = f"{protocol}://{host_clean}/api/websocket"
         logger.info(f"Connecting to Home Assistant: {uri}")
         
+        ssl_context = None
+        if protocol == "wss":
+            import ssl
+            verify_ssl = utils.get_env_bool("HA_VERIFY_SSL", True)
+            if not verify_ssl:
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                logger.warning("SSL verification is disabled for Home Assistant connection")
+        
         try:
+            connect_kwargs = {"max_size": 10 * 1024 * 1024}
+            if ssl_context:
+                connect_kwargs["ssl"] = ssl_context
+                
             self.websocket = await asyncio.wait_for(
-                websockets.connect(uri, max_size=10 * 1024 * 1024),  # 10MB limit
+                websockets.connect(uri, **connect_kwargs),
                 timeout=15.0
             )
             logger.info("Connection established")
@@ -283,6 +317,14 @@ class HomeAssistantClient:
                     error_message = error_data.get("message", "Unknown error")
                     logger.error(f"Pipeline error: {error_code} - {error_message}")
                     return False
+                
+                elif (response_json.get("type") == "result" and 
+                      not response_json.get("success", True)):
+                    error = response_json.get("error", {})
+                    error_code = error.get("code", "unknown")
+                    error_message = error.get("message", "Unknown error")
+                    logger.error(f"Pipeline start failed: {error_code} - {error_message}")
+                    return False
                         
             except asyncio.TimeoutError:
                 logger.error("Timeout waiting for pipeline response")
@@ -494,9 +536,9 @@ class HomeAssistantClient:
                                             logger.error(f"Error getting TTS URL: {e}")
                                             break
                                     
-                                    # Play TTS through GLaSSIST
+                                    # Play TTS through WinVE
                                     if tts_url:
-                                        # Create fake results that GLaSSIST expects
+                                        # Create fake results that WinVE expects
                                         fake_results = [
                                             {
                                                 "type": "event",
@@ -651,6 +693,8 @@ class HomeAssistantClient:
                 logger.info("Connection closed")
             except Exception as e:
                 logger.error(f"Connection closing error: {e}")
+            finally:
+                self.websocket = None
     
     async def send_tts_message(self, message):
         """Send TTS message to Home Assistant using service call."""

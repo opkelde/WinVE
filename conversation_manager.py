@@ -59,7 +59,7 @@ class ConversationManager:
         
         # Check if we're already busy
         if self.animation_server.current_state not in ["hidden", "idle"]:
-            logger.warning("GLaSSIST busy, ignoring HA prompt")
+            logger.warning("WinVE busy, ignoring HA prompt")
             return
         
         try:
@@ -102,7 +102,7 @@ class ConversationManager:
                 except Exception as e:
                     logger.error(f"Error managing volumes: {e}")
             
-            # 1. Play TTS through GLaSSIST using dedicated TTS pipeline
+            # 1. Play TTS through WinVE using dedicated TTS pipeline
             logger.info(f"🔊 Creating separate TTS pipeline for: {message}")
             
             # Use the same temp client for TTS
@@ -155,16 +155,16 @@ class ConversationManager:
                         logger.error(f"Error getting TTS URL: {e}")
                         break
                 
-                # Play TTS through GLaSSIST audio system
+                # Play TTS through WinVE audio system
                 if tts_url:
-                    logger.info("🎵 Playing TTS through GLaSSIST...")
+                    logger.info("🎵 Playing TTS through WinVE...")
                     tts_success = utils.play_audio_from_url(
                         tts_url, 
                         tts_client.host, 
                         self.animation_server
                     )
                     if tts_success:
-                        logger.info("✅ TTS played successfully through GLaSSIST")
+                        logger.info("✅ TTS played successfully through WinVE")
                     else:
                         logger.warning("❌ TTS playback failed")
                 else:

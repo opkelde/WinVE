@@ -1,10 +1,10 @@
-# GLaSSIST Tests
+# WinVE Tests
 
-Comprehensive test suite for GLaSSIST Desktop Voice Assistant.
+Comprehensive test suite for WinVE Desktop Voice Assistant.
 
 ## Overview
 
-This test suite provides comprehensive coverage for all major components of GLaSSIST:
+This test suite provides comprehensive coverage for all major components of WinVE:
 
 - **Unit Tests** - Test individual components in isolation
 - **Integration Tests** - Test component interactions and workflows

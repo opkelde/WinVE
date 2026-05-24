@@ -1,6 +1,6 @@
 # AGENT Instructions
 
-This file contains guidelines for automated contributions to the GLaSSIST repository.
+This file contains guidelines for automated contributions to the WinVE repository.
 
 ## Code Style
 - Target Python 3.8 or newer.
@@ -20,8 +20,8 @@ This file contains guidelines for automated contributions to the GLaSSIST reposi
 - Add a "Notes" section if important context is needed.
 
 ## Testing
-- The project does not yet contain automated tests.
-- Validate Python files with:
-  `python -m py_compile $(git ls-files '*.py')`
-- If an automated test suite is added, run `pytest` before committing.
+- Run all automated tests before committing:
+  `py -m pytest -c tests/pytest.ini`
+- Validate Python files compile properly:
+  `py -m py_compile $(git ls-files '*.py')`
 

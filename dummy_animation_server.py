@@ -5,10 +5,11 @@ import time
 logger = utils.setup_logger()
 
 class DummyAnimationServer:
-    def __init__(self):
+    def __init__(self, state_change_callback=None):
         """Initialize dummy server."""
         self.current_state = "hidden"
         self.voice_command_callback = None
+        self.state_change_callback = state_change_callback
         logger.info("Dummy animation server initialized (animations disabled)")
     
     def start(self):
@@ -25,9 +26,15 @@ class DummyAnimationServer:
     
     def change_state(self, new_state, error_message=None, success_message=None, **kwargs):
         """Just update current state without animations."""
-        if new_state != self.current_state:
+        if new_state != self.current_state or error_message or success_message:
             logger.debug(f"State change: {self.current_state} -> {new_state}")
             self.current_state = new_state
+            
+            if self.state_change_callback:
+                try:
+                    self.state_change_callback(new_state)
+                except Exception as e:
+                    logger.error(f"Error in dummy state change callback: {e}")
             
             # Log messages for debugging
             if error_message:

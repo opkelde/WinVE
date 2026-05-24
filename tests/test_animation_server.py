@@ -4,7 +4,7 @@ Tests for animation_server module.
 import pytest
 import json
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import animation_server
 
 
@@ -67,10 +67,10 @@ class TestAnimationServer:
             assert server.loop == mock_loop
             mock_loop.run_until_complete.assert_called_once()
     
-    @patch('websockets.serve')
+    @patch('websockets.serve', new_callable=AsyncMock)
     async def test_start_websocket_server(self, mock_serve):
         """Test WebSocket server start."""
-        mock_server = AsyncMock()
+        mock_server = Mock()
         mock_serve.return_value = mock_server
         
         server = animation_server.AnimationServer(port=8765)
@@ -89,6 +89,7 @@ class TestAnimationServer:
     async def test_handle_client_connection(self):
         """Test client connection handling."""
         server = animation_server.AnimationServer()
+        server.clients = MagicMock(wraps=set())
         mock_websocket = AsyncMock()
         mock_websocket.remote_address = ("127.0.0.1", 12345)
         mock_websocket.__aiter__.return_value = []  # No messages
@@ -100,7 +101,7 @@ class TestAnimationServer:
                 pass
             
             # Should add client to set
-            assert mock_websocket in server.clients
+            server.clients.add.assert_called_once_with(mock_websocket)
             
             # Should send initial state
             mock_send.assert_called_once_with(
@@ -231,11 +232,11 @@ class TestAnimationServer:
             server.change_state("listening")
             
             assert server.current_state == "listening"
-            mock_broadcast.assert_called_once_with({
-                "type": "state_change",
-                "state": "listening",
-                "message": None
-            })
+            mock_broadcast.assert_called_once()
+            called_dict = mock_broadcast.call_args[0][0]
+            assert called_dict["type"] == "state_change"
+            assert called_dict["state"] == "listening"
+            assert called_dict["message"] is None
     
     def test_change_state_with_message(self):
         """Test state change with message."""
@@ -246,31 +247,27 @@ class TestAnimationServer:
             server.change_state("error", "Test error message")
             
             assert server.current_state == "error"
-            mock_broadcast.assert_called_once_with({
-                "type": "state_change",
-                "state": "error",
-                "message": "Test error message"
-            })
+            mock_broadcast.assert_called_once()
+            called_dict = mock_broadcast.call_args[0][0]
+            assert called_dict["type"] == "state_change"
+            assert called_dict["state"] == "error"
+            assert called_dict["message"] == "Test error message"
     
     def test_send_audio_data(self):
         """Test audio data sending."""
         server = animation_server.AnimationServer()
         server.loop = Mock()
         
-        audio_data = b"test_audio_data"
+        audio_data = b"\x00\x00" * 128
         
-        with patch.object(server, '_broadcast_to_clients') as mock_broadcast, \
-             patch('animation_server.utils.convert_audio_chunk_to_float32') as mock_convert:
-            
-            mock_convert.return_value = [0.1, 0.2, 0.3]
-            
+        with patch.object(server, '_broadcast_to_clients') as mock_broadcast:
             server.send_audio_data(audio_data)
             
-            mock_convert.assert_called_once_with(audio_data)
-            mock_broadcast.assert_called_once_with({
-                "type": "audio_data",
-                "data": [0.1, 0.2, 0.3]
-            })
+            mock_broadcast.assert_called_once()
+            called_arg = mock_broadcast.call_args[0][0]
+            assert called_arg["type"] == "audio_data"
+            assert "fft" in called_arg
+            assert len(called_arg["fft"]) == 32
     
     def test_send_audio_data_exception(self):
         """Test audio data sending with exception."""
@@ -280,9 +277,9 @@ class TestAnimationServer:
         audio_data = b"test_audio_data"
         
         with patch.object(server, '_broadcast_to_clients') as mock_broadcast, \
-             patch('animation_server.utils.convert_audio_chunk_to_float32') as mock_convert:
+             patch('numpy.frombuffer') as mock_frombuffer:
             
-            mock_convert.side_effect = Exception("Conversion error")
+            mock_frombuffer.side_effect = Exception("Conversion error")
             
             # Should not raise exception
             server.send_audio_data(audio_data)
@@ -299,10 +296,10 @@ class TestAnimationServer:
         with patch.object(server, '_broadcast_to_clients') as mock_broadcast:
             server.send_response_text(response_text)
             
-            mock_broadcast.assert_called_once_with({
-                "type": "response_text",
-                "text": response_text
-            })
+            mock_broadcast.assert_called_once()
+            called_dict = mock_broadcast.call_args[0][0]
+            assert called_dict["type"] == "response_text"
+            assert called_dict["text"] == response_text
     
     def test_show_success(self):
         """Test success message display."""
@@ -312,7 +309,7 @@ class TestAnimationServer:
         with patch.object(server, 'change_state') as mock_change_state:
             server.show_success("Success message", duration=3.0)
             
-            mock_change_state.assert_called_once_with("success", "Success message")
+            mock_change_state.assert_called_once_with("success", success_message="Success message")
     
     def test_show_error(self):
         """Test error message display."""
@@ -322,7 +319,7 @@ class TestAnimationServer:
         with patch.object(server, 'change_state') as mock_change_state:
             server.show_error("Error message", duration=5.0)
             
-            mock_change_state.assert_called_once_with("error", "Error message")
+            mock_change_state.assert_called_once_with("error", error_message="Error message")
     
     def test_set_voice_command_callback(self):
         """Test voice command callback setting."""
@@ -337,6 +334,8 @@ class TestAnimationServer:
         """Test server stop."""
         server = animation_server.AnimationServer()
         server.loop = Mock()
+        server.loop.is_closed.return_value = False
+        server.loop.is_running.return_value = True
         server.server = Mock()
         
         server.stop()
@@ -352,36 +351,6 @@ class TestAnimationServer:
         
         # Should not raise exception
         server.stop()
-    
-    async def test_stop_server_success(self):
-        """Test successful server stop."""
-        server = animation_server.AnimationServer()
-        server.server = AsyncMock()
-        
-        await server._stop_server()
-        
-        server.server.close.assert_called_once()
-        server.server.wait_closed.assert_called_once()
-        assert server.server is None
-    
-    async def test_stop_server_no_server(self):
-        """Test server stop when no server exists."""
-        server = animation_server.AnimationServer()
-        server.server = None
-        
-        # Should not raise exception
-        await server._stop_server()
-    
-    async def test_stop_server_exception(self):
-        """Test server stop with exception."""
-        server = animation_server.AnimationServer()
-        server.server = AsyncMock()
-        server.server.close.side_effect = Exception("Close error")
-        
-        # Should not raise exception
-        await server._stop_server()
-        
-        assert server.server is None
 
 
 class TestAnimationServerIntegration:
@@ -433,11 +402,17 @@ class TestAnimationServerIntegration:
         await asyncio.sleep(0.1)
         
         # Both clients should receive the state change
-        expected_message = json.dumps({
-            "type": "state_change",
-            "state": "listening",
-            "message": "Listening for voice"
-        })
+        assert mock_client1.send.call_count == 1
+        assert mock_client2.send.call_count == 1
         
-        mock_client1.send.assert_called_with(expected_message)
-        mock_client2.send.assert_called_with(expected_message)
+        # Parse the JSON argument passed to send
+        sent_msg_1 = json.loads(mock_client1.send.call_args[0][0])
+        sent_msg_2 = json.loads(mock_client2.send.call_args[0][0])
+        
+        assert sent_msg_1["type"] == "state_change"
+        assert sent_msg_1["state"] == "listening"
+        assert sent_msg_1["message"] == "Listening for voice"
+        
+        assert sent_msg_2["type"] == "state_change"
+        assert sent_msg_2["state"] == "listening"
+        assert sent_msg_2["message"] == "Listening for voice"

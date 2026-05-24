@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test runner script for GLaSSIST Desktop Voice Assistant.
+Test runner script for WinVE Desktop Voice Assistant.
 """
 import os
 import sys
@@ -151,7 +151,7 @@ def run_integration_tests():
 
 def run_all_tests(args):
     """Run all test suites."""
-    print("🧪 GLaSSIST Test Suite")
+    print("🧪 WinVE Test Suite")
     print("=" * 60)
     
     results = {}
@@ -209,7 +209,7 @@ def run_all_tests(args):
 def main():
     """Main function."""
     parser = argparse.ArgumentParser(
-        description="GLaSSIST Test Runner",
+        description="WinVE Test Runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

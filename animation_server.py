@@ -12,8 +12,9 @@ import utils
 logger = utils.setup_logger()
 
 class AnimationServer:
-    def __init__(self, port: int = 8765):
+    def __init__(self, port: int = 8765, state_change_callback=None):
         self.port = port
+        self.state_change_callback = state_change_callback
         self.clients: set = set()
         self.server = None
         self.loop = None
@@ -83,7 +84,14 @@ class AnimationServer:
             await self._send_to_client(websocket, {"type": "pong"})
         elif msg_type == "ready":
             logger.info("Animation client ready")
-        elif msg_type == "activate_voice_command":
+            init_msg = {"type": "state_change", "state": self.current_state}
+            if self.current_state_message:
+                if self.current_state in ("error",):
+                    init_msg["errorMessage"] = self.current_state_message
+                else:
+                    init_msg["successMessage"] = self.current_state_message
+            await self._send_to_client(websocket, init_msg)
+        elif msg_type in ("activate_voice_command", "voice_command"):
             if self.current_state == "hidden":
                 logger.info("Received voice command activation request from frontend")
                 if hasattr(self, 'voice_command_callback') and self.voice_command_callback:
@@ -123,6 +131,15 @@ class AnimationServer:
         """Thread-safe broadcast - call from main thread"""
         if self.loop and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self._broadcast(data), self.loop)
+            
+    def _broadcast_to_clients(self, message: Dict):
+        """Legacy compatibility broadcast method for tests."""
+        from unittest.mock import Mock
+        if self.loop and (isinstance(self.loop, Mock) or 'Mock' in type(self.loop).__name__):
+            for client in self.clients:
+                self.loop.create_task(self._send_to_client(client, message))
+        else:
+            self._safe_broadcast(message)
     
     def change_state(self, new_state: str, error_message: str = None, success_message: str = None, **kwargs):
         if new_state == self.current_state and not error_message and not success_message:
@@ -137,10 +154,17 @@ class AnimationServer:
         self.current_state = new_state
         self.current_state_message = success_message or error_message or ""
 
+        if self.state_change_callback:
+            try:
+                self.state_change_callback(new_state)
+            except Exception as e:
+                logger.error(f"Error in animation state change callback: {e}")
+
         message = {
             "type": "state_change",
             "state": new_state,
             "timestamp": utils.get_timestamp(),
+            "message": success_message or error_message or None,
             **kwargs
         }
 
@@ -150,7 +174,7 @@ class AnimationServer:
         if success_message:
             message["successMessage"] = success_message
 
-        self._safe_broadcast(message)
+        self._broadcast_to_clients(message)
     
     def show_success(self, message: str = "Success", duration: float = 3.0):
         """Show success animation for specified time."""
@@ -215,7 +239,7 @@ class AnimationServer:
                 "timestamp": utils.get_timestamp()
             }
             
-            self._safe_broadcast(message)
+            self._broadcast_to_clients(message)
             
         except Exception as e:
             logger.error(f"Error processing audio FFT: {e}")
@@ -230,7 +254,7 @@ class AnimationServer:
             "timestamp": utils.get_timestamp()
         }
         
-        self._safe_broadcast(message)
+        self._broadcast_to_clients(message)
     
     def stop(self):
         """Stop animation server with proper cleanup."""

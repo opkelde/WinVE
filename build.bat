@@ -1,13 +1,25 @@
 @echo off
 echo ========================================
-echo      GLaSSIST Ultimate Build Script
+echo      WinVE Ultimate Build Script
 echo ========================================
 echo.
 
-:: Check if virtual environment is activated
-if not defined VIRTUAL_ENV (
-    echo ERROR: Virtual environment not activated!
-    echo Please run: venv\Scripts\activate
+:: Check if virtual environment is activated, or if packages are installed globally
+set "HAS_PACKAGES=0"
+if defined VIRTUAL_ENV (
+    set "HAS_PACKAGES=1"
+    set "SITE_PACKAGES=venv\Lib\site-packages"
+) else (
+    :: Try to get site-packages path from global python/py
+    for /f "delims=" %%i in ('py -c "import os, openwakeword; print(os.path.abspath(os.path.dirname(openwakeword.__path__[0])))" 2^>nul') do (
+        set "SITE_PACKAGES=%%i"
+        set "HAS_PACKAGES=1"
+    )
+)
+
+if "%HAS_PACKAGES%"=="0" (
+    echo ERROR: Required packages not found!
+    echo Please activate virtual environment or install required packages.
     pause
     exit /b 1
 )
@@ -22,9 +34,9 @@ if exist "build" (
     echo   Removing build folder...
     rmdir /s /q "build"
 )
-if exist "inno\GLaSSIST-Setup.exe" (
+if exist "inno\WinVE-Setup.exe" (
     echo   Removing old installer...
-    del /q "inno\GLaSSIST-Setup.exe"
+    del /q "inno\WinVE-Setup.exe"
 )
 if exist "*.spec" (
     echo   Removing old spec files...
@@ -36,15 +48,16 @@ echo.
 :: Step 2: Build with PyInstaller
 echo [2/5] Building application with PyInstaller...
 echo   This may take several minutes...
-pyinstaller --name "GLaSSIST" ^
+py -m PyInstaller --name "WinVE" ^
     --noconsole ^
+    --additional-hooks-dir "pyinstaller_hooks" ^
     --icon "img/icon.ico" ^
     --add-data "frontend;frontend" ^
     --add-data "sound;sound" ^
     --add-data "img;img" ^
     --add-data "models;models" ^
-    --add-data "venv/Lib/site-packages/openwakeword;openwakeword" ^
-    --add-data "venv/Lib/site-packages/onnxruntime/capi/*;onnxruntime/capi/" ^
+    --add-data "%SITE_PACKAGES%\openwakeword;openwakeword" ^
+    --add-data "%SITE_PACKAGES%\onnxruntime\capi\*;onnxruntime/capi/" ^
     --hidden-import "openwakeword" ^
     --hidden-import "openwakeword.model" ^
     --hidden-import "openwakeword.utils" ^
@@ -56,7 +69,7 @@ pyinstaller --name "GLaSSIST" ^
     --hidden-import "onnxruntime" ^
     --hidden-import "sounddevice" ^
     --hidden-import "soundfile" ^
-    --hidden-import "webview" ^
+    --hidden-import "flet" ^
     --hidden-import "websockets" ^
     --hidden-import "keyboard" ^
     --collect-all "openwakeword" ^
@@ -72,24 +85,33 @@ echo   PyInstaller build complete!
 echo.
 
 :: Step 3: Fix MSVCP140.dll issue
-echo [3/5] Fixing Visual C++ Runtime...
+echo [3/5] Fixing Visual C++ Runtime and openwakeword resources...
 if exist "C:\Windows\System32\MSVCP140.dll" (
-    copy "C:\Windows\System32\MSVCP140.dll" "dist\GLaSSIST\_internal\" > nul
+    copy "C:\Windows\System32\MSVCP140.dll" "dist\WinVE\_internal\" > nul
     echo   MSVCP140.dll copied successfully!
 ) else (
     echo   Warning: MSVCP140.dll not found in System32
     echo   You may need to install Visual C++ Redistributable
 )
+
+:: Copy openwakeword resources manually
+echo   Copying openwakeword resources...
+if exist "%SITE_PACKAGES%\openwakeword\resources" (
+    xcopy /E /I /Y "%SITE_PACKAGES%\openwakeword\resources" "dist\WinVE\_internal\openwakeword\resources\" > nul
+    echo   openwakeword resources copied successfully!
+) else (
+    echo   Warning: openwakeword resources not found in %SITE_PACKAGES%
+)
 echo.
 
 :: Step 4: Test the build
 echo [4/5] Testing the build...
-if exist "dist\GLaSSIST\GLaSSIST.exe" (
-    echo   GLaSSIST.exe created successfully!
+if exist "dist\WinVE\WinVE.exe" (
+    echo   WinVE.exe created successfully!
     echo   Size: 
-    for %%I in ("dist\GLaSSIST\GLaSSIST.exe") do echo     %%~zI bytes
+    for %%I in ("dist\WinVE\WinVE.exe") do echo     %%~zI bytes
 ) else (
-    echo   GLaSSIST.exe not found!
+    echo   WinVE.exe not found!
     pause
     exit /b 1
 )
@@ -106,7 +128,7 @@ if not exist %INNO_PATH% (
 )
 
 if not exist "setup.iss" (
-    echo   installer.iss not found!
+    echo   setup.iss not found!
     echo   Please create the Inno Setup script first
     goto :skip_installer
 )
@@ -119,11 +141,11 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-if exist "inno\GLaSSIST-Setup.exe" (
+if exist "inno\WinVE-Setup.exe" (
     echo   Installer created successfully!
-    echo   Location: inno\GLaSSIST-Setup.exe
+    echo   Location: inno\WinVE-Setup.exe
     echo   Size: 
-    for %%I in ("inno\GLaSSIST-Setup.exe") do echo     %%~zI bytes
+    for %%I in ("inno\WinVE-Setup.exe") do echo     %%~zI bytes
 ) else (
     echo   Installer not found!
 )
@@ -135,9 +157,9 @@ echo            BUILD COMPLETE!
 echo ========================================
 echo.
 echo Files created:
-echo   dist\GLaSSIST\GLaSSIST.exe - Standalone application
-if exist "inno\GLaSSIST-Setup.exe" (
-    echo   inno\GLaSSIST-Setup.exe - Windows installer
+echo   dist\WinVE\WinVE.exe - Standalone application
+if exist "inno\WinVE-Setup.exe" (
+    echo   inno\WinVE-Setup.exe - Windows installer
 )
 echo.
 echo Ready for distribution!

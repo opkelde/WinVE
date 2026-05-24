@@ -1,19 +1,19 @@
-# 🎯 GLaSSIST Interactive Prompts - Complete Setup Guide
+# 🎯 WinVE Interactive Prompts - Complete Setup Guide
 
-Transform your Home Assistant into a truly conversational smart home! GLaSSIST can now receive prompts from HA, ask questions via TTS, listen for voice responses, and execute actions based on what you say.
+Transform your Home Assistant into a truly conversational smart home! WinVE can now receive prompts from HA, ask questions via TTS, listen for voice responses, and execute actions based on what you say.
 
 ## 🚀 How It Works
 
 **The Magic Flow:**
 1. 🏠 **HA detects event** (door opens, motion detected, etc.)
-2. 🔗 **HA sends HTTP request** to GLaSSIST with question + AI context instructions
-3. 🎤 **GLaSSIST asks user** the question via TTS 
+2. 🔗 **HA sends HTTP request** to WinVE with question + AI context instructions
+3. 🎤 **WinVE asks user** the question via TTS 
 4. 🗣️ **User responds** with voice
-5. 🧠 **GLaSSIST sends to HA AI** user response + context instructions
+5. 🧠 **WinVE sends to HA AI** user response + context instructions
 6. ✅ **HA AI understands context** and executes appropriate action
 
 **Example:**
-> Door opens → HA sends: *"Welcome home! Want lights and coffee?" + context: "User arriving home, activate arrival routine if they agree"* → GLaSSIST asks → You: *"Yes please!"* → GLaSSIST sends: *"Context: User arriving home, activate arrival routine if they agree. User said: Yes please"* → HA AI turns on lights and starts coffee
+> Door opens → HA sends: *"Welcome home! Want lights and coffee?" + context: "User arriving home, activate arrival routine if they agree"* → WinVE asks → You: *"Yes please!"* → WinVE sends: *"Context: User arriving home, activate arrival routine if they agree. User said: Yes please"* → HA AI turns on lights and starts coffee
 
 ## 🏠 Home Assistant Configuration
 
@@ -23,8 +23,8 @@ Add this to your `configuration.yaml`:
 
 ```yaml
 rest_command:
-  glassist_prompt:
-    url: "http://192.168.1.100:8766/prompt"  # Change IP to your GLaSSIST machine
+  winve_prompt:
+    url: "http://192.168.1.100:8766/prompt"  # Change IP to your WinVE machine
     method: POST
     headers:
       Content-Type: "application/json"
@@ -39,7 +39,7 @@ rest_command:
 
 ### Parameters
 
-- **message**: The text GLaSSIST should speak
+- **message**: The text WinVE should speak
 - **context**: Context information for the conversation (optional)  
 - **timeout**: How long to wait for user response in seconds (default: 15)
 - **wait_for_response**: Whether to wait for user input after TTS (default: true)
@@ -65,7 +65,7 @@ automation:
         entity_id: input_boolean.morning_routine_done
         state: 'off'
     action:
-      - service: rest_command.glassist_prompt
+      - service: rest_command.winve_prompt
         data:
           message: >
             Good morning! It's {{ states('sensor.temperature_outside') }}°C outside with {{ states('weather.home') }}.
@@ -88,7 +88,7 @@ automation:
         state: 'home'
         for: "00:00:30"
     action:
-      - service: rest_command.glassist_prompt
+      - service: rest_command.winve_prompt
         data:
           message: >
             {% set time_away = (now() - states.person.john.last_changed).total_seconds() / 3600 %}
@@ -118,7 +118,7 @@ automation:
         attribute: media_content_type
         state: 'movie'
     action:
-      - service: rest_command.glassist_prompt
+      - service: rest_command.winve_prompt
         data:
           message: >
             I see you're watching "{{ state_attr('media_player.living_room_tv', 'media_title') }}".
@@ -137,7 +137,7 @@ automation:
         from: 'home'
         to: 'away'
     action:
-      - service: rest_command.glassist_prompt
+      - service: rest_command.winve_prompt
         data:
           message: >
             {% set lights_on = states.light | selectattr('state', 'equalto', 'on') | list | count %}
@@ -161,7 +161,7 @@ automation:
         after: "21:00:00"
         before: "02:00:00"
     action:
-      - service: rest_command.glassist_prompt
+      - service: rest_command.winve_prompt
         data:
           message: >
             {% set tomorrow_weather = state_attr('weather.home', 'forecast')[0] %}
@@ -182,7 +182,7 @@ automation:
         above: 3000
         for: "00:05:00"
     action:
-      - service: rest_command.glassist_prompt
+      - service: rest_command.winve_prompt
         data:
           message: >
             High energy usage detected! Currently consuming {{ states('sensor.current_power_usage') }}W.
@@ -194,13 +194,13 @@ automation:
 
 ### Step 3: How AI Processes Responses
 
-When user responds, GLaSSIST sends to HA AI:
+When user responds, WinVE sends to HA AI:
 *"Context: [your context instructions]. User said: [user voice response]"*
 
 The AI automatically understands what to do based on context and executes appropriate actions. No additional scripts needed - HA AI handles everything!
 
 **Example:**
-- GLaSSIST sends: *"Context: User is leaving home. If they want secure departure mode, turn off all lights. User said: Yes please"*
+- WinVE sends: *"Context: User is leaving home. If they want secure departure mode, turn off all lights. User said: Yes please"*
 - HA AI automatically turns off lights, arms security, etc.
 
 
@@ -208,7 +208,7 @@ The AI automatically understands what to do based on context and executes approp
 
 **The AI automatically understands context!** No complex configuration needed.
 
-**Examples of what GLaSSIST sends to HA AI:**
+**Examples of what WinVE sends to HA AI:**
 
 1. **Morning Routine:**
    - *"Context: User is waking up in the morning. If they agree, activate morning routine: turn on coffee maker, start news briefing, and set optimal lighting. User said: Yes please"*
@@ -228,7 +228,7 @@ The AI automatically understands what to do based on context and executes approp
 
 ### Quick API Test
 ```bash
-# Test if GLaSSIST is listening
+# Test if WinVE is listening
 curl -X POST http://192.168.1.100:8766/prompt \
   -H "Content-Type: application/json" \
   -d '{
@@ -241,12 +241,12 @@ curl -X POST http://192.168.1.100:8766/prompt \
 ### HA Developer Tools Test
 Go to `Developer Tools > Services`:
 
-**Service:** `rest_command.glassist_prompt`
+**Service:** `rest_command.winve_prompt`
 
 **Data:**
 ```yaml
 message: "Testing the connection. Can you hear me and respond with your voice?"
-context: "This is a connection test. If user responds, confirm that GLaSSIST and Home Assistant are communicating properly"
+context: "This is a connection test. If user responds, confirm that WinVE and Home Assistant are communicating properly"
 timeout: 20
 ```
 

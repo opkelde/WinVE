@@ -1,11 +1,19 @@
 """
-Enhanced main.py - preserves original code with improvements
+Enhanced main.py - WinVE (Windows Voice Endpoint) main application
 """
-import asyncio
-import threading
-import webview
 import sys
 import os
+
+# Fix Working Directory immediately on startup (fixes startup issues from shortcuts)
+if getattr(sys, 'frozen', False):
+    app_dir = os.path.dirname(sys.executable)
+else:
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(app_dir)
+
+# Set default background color for WebView2 to transparent to prevent white/gray flashes
+import asyncio
+import threading
 import argparse
 import pystray
 from PIL import Image, ImageDraw
@@ -16,7 +24,7 @@ from audio import AudioManager
 from animation_server import AnimationServer
 from wake_word_detector import WakeWordDetector, validate_wake_word_config
 import platform
-from platform_utils import check_linux_dependencies, hide_window_from_taskbar, get_icon_path
+from platform_utils import get_icon_path
 from dummy_animation_server import DummyAnimationServer
 from conversation_manager import ConversationManager
 from prompt_server import PromptServer
@@ -41,18 +49,12 @@ class HAAssistApp:
         self.conversation_manager = None
         self.prompt_server = None
         self.satellite_server = None
-        self.connection_mode = utils.get_env("CONNECTION_MODE", "websocket").lower()
+        self.connection_mode = utils.get_env("CONNECTION_MODE", "esphome").lower()
         self.animations_enabled = utils.get_env_bool("HA_ANIMATIONS_ENABLED", True)
         self.response_text_enabled = utils.get_env_bool("HA_RESPONSE_TEXT_ENABLED", True)
         self.open_settings_on_start = open_settings_on_start
 
-        # Platform detection
-        self.is_linux = platform.system() == "Linux"
-        self.is_windows = platform.system() == "Windows"
-        # Check platform-specific dependencies
-        if self.is_linux and not check_linux_dependencies():
-            logger.error("Missing required dependencies for Linux")
-            sys.exit(1)
+
 
         # Pipeline caching
         self.cached_pipelines = []
@@ -110,9 +112,6 @@ class HAAssistApp:
             logger.info("Wake word detection stopped")
 
     def create_tray_icon(self):
-        if platform.system() == "Linux":
-            logger.info("System tray disabled on Linux - use hotkey ctrl+shift+h")
-            return
         """Create system tray icon with cross-platform support."""
         icon_path = get_icon_path()
         
@@ -131,9 +130,9 @@ class HAAssistApp:
         menu = self._build_tray_menu()
         
         self.tray_icon = pystray.Icon(
-            "GLaSSIST",
+            "WinVE",
             image,
-            "GLaSSIST Desktop",
+            "WinVE Desktop",
             menu
         )
         
@@ -297,7 +296,7 @@ class HAAssistApp:
                         print(f"❌ Connection test: {message}")
                         
                         if self.animation_server:
-                            self.animation_server.show_error(f"Connection failed", duration=5.0)
+                            self.animation_server.show_error(f"Connection failed: {message}", duration=5.0)
                     
                 finally:
                     loop.close()
@@ -308,7 +307,7 @@ class HAAssistApp:
                 print(f"❌ {error_msg}")
 
                 if self.animation_server:
-                    self.animation_server.show_error("Test error", duration=5.0)
+                    self.animation_server.show_error(error_msg, duration=5.0)
         
         threading.Thread(target=test_thread, daemon=True).start()
     
@@ -383,14 +382,20 @@ class HAAssistApp:
         
         threading.Thread(target=pipelines_thread, daemon=True).start()
 
+    def on_animation_state_change(self, state):
+        """Handle transition state changes of the animation server."""
+        logger.info(f"Animation state changed to: {state}")
+        # Flet overlay handles its own visibility via WebSocket messages
+        # from AnimationServer. No window manipulation needed here.
+
     def setup_animation_server(self):
         """Setup animation server or dummy server based on configuration."""
         if self.animations_enabled:
             from animation_server import AnimationServer
-            self.animation_server = AnimationServer()
+            self.animation_server = AnimationServer(state_change_callback=self.on_animation_state_change)
             logger.info("Real animation server created")
         else:
-            self.animation_server = DummyAnimationServer()
+            self.animation_server = DummyAnimationServer(state_change_callback=self.on_animation_state_change)
             logger.info("Dummy animation server created (animations disabled)")
         
         self.animation_server.set_voice_command_callback(self.on_voice_command_trigger)
@@ -431,68 +436,24 @@ class HAAssistApp:
             logger.error("❌ Failed to start prompt server")
             return False
     
-    def setup_webview(self):
-        """Setup webview window."""
-        frontend_path = os.path.join(os.path.dirname(__file__), 'frontend')
-        index_path = os.path.join(frontend_path, 'index.html')
-        
-        if not os.path.exists(index_path):
-            logger.error(f"Frontend file not found: {index_path}")
-            return False
-        
-        icon_path = os.path.join(os.path.dirname(__file__), 'img', 'icon.ico')
-        window_width = utils.get_env("WINDOW_WIDTH", 400, int)
-        window_height = utils.get_env("WINDOW_HEIGHT", 400, int)
-        
-        self.window = webview.create_window(
-            'GLaSSIST',
-            index_path,
-            width=window_width,
-            height=window_height,
-            resizable=False,
-            fullscreen=False,
-            minimized=False,
-            on_top=True,
-            shadow=False,
-            frameless=True,
-            transparent=True,
-            y=10
-        )
-        
-        logger.info(f"Webview window configured ({window_width}x{window_height}, hidden from taskbar)")
-        return True
+    # setup_webview removed — replaced by Flet overlay in flet_overlay.py
 
     def open_settings(self, icon=None, item=None):
-        """Open enhanced settings window."""
-        logger.info("Opening enhanced settings...")
+        """Open enhanced settings window in a separate process."""
+        logger.info("Opening enhanced settings in a separate process...")
         try:
-            if self.settings_window and hasattr(self.settings_window, "is_alive"):
-                try:
-                    if self.settings_window.is_alive():
-                        logger.info("Settings window already open")
-                        return
-                except Exception:
-                    pass
-
-            from flet_settings import show_flet_settings
-            self.settings_window = show_flet_settings(self.animation_server)            
-        except ImportError as e:
-            logger.error(f"improved_settings_dialog.py not found: {e}")
+            import subprocess
+            import sys
             
-            import tkinter as tk
-            from tkinter import messagebox
-            
-            root = tk.Tk()
-            root.withdraw()
-            
-            messagebox.showerror(
-                "Settings Error", 
-                "improved_settings_dialog.py file not found!\n\n"
-                "Create this file in application folder\n"
-                "or check if all files were copied."
-            )
-            root.destroy()
-            
+            if getattr(sys, 'frozen', False):
+                # Compiled executable
+                exe_path = sys.executable
+                subprocess.Popen([exe_path, "--settings-only"])
+            else:
+                # Source mode
+                main_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
+                subprocess.Popen([sys.executable, main_path, "--settings-only"])
+            logger.info("Settings process launched.")
         except Exception as e:
             logger.exception(f"Error opening settings: {e}")
             
@@ -763,15 +724,8 @@ class HAAssistApp:
         thread.start()
     
     def hide_from_taskbar(self):
-        """Hide window from taskbar using cross-platform implementation."""
-        try:
-            success = hide_window_from_taskbar("GLaSSIST")
-            if success:
-                logger.info("Window successfully hidden from taskbar")
-            else:
-                logger.warning("Failed to hide window from taskbar")
-        except Exception as e:
-            logger.exception(f"Error hiding window from taskbar: {e}")
+        """No-op — Flet overlay uses skip_task_bar natively."""
+        pass
 
     def trigger_voice_command(self, icon=None, item=None):
         """Trigger from tray menu."""
@@ -807,17 +761,8 @@ class HAAssistApp:
             self.animation_server.change_state("hidden")
     
     def toggle_window(self, icon=None, item=None):
-        """Toggle window visibility."""
-        if self.window_visible:
-            if hasattr(webview, 'windows') and webview.windows:
-                webview.windows[0].minimize()
-            self.window_visible = False
-            logger.info("Window hidden")
-        else:
-            if hasattr(webview, 'windows') and webview.windows:
-                webview.windows[0].restore()
-            self.window_visible = True
-            logger.info("Window shown")
+        """Toggle window visibility — overlay manages itself."""
+        logger.info("Toggle window (overlay self-managed)")
     
     def quit_application(self, icon=None, item=None):
         """Close application from tray menu with proper cleanup."""
@@ -834,14 +779,7 @@ class HAAssistApp:
             except Exception as e:
                 logger.error(f"Error stopping tray icon: {e}")
         
-        # Close webview windows
-        if hasattr(webview, 'windows') and webview.windows:
-            try:
-                for window in webview.windows:
-                    window.destroy()
-                logger.info("Webview windows closed")
-            except Exception as e:
-                logger.error(f"Error closing webview windows: {e}")
+        # Flet overlay cleans up automatically (daemon thread)
         
         # Give some time for cleanup to complete
         import time
@@ -865,7 +803,7 @@ class HAAssistApp:
     
     def _start_esphome_mode(self):
         """Start ESPHome satellite server and continuous audio streaming loop."""
-        device_name = utils.get_env("DEVICE_NAME", "GLaSSIST")
+        device_name = utils.get_env("DEVICE_NAME", "WinVE")
         port = utils.get_env("ESPHOME_PORT", 6053, int)
         pipeline_id = utils.get_env("HA_PIPELINE_ID")
 
@@ -934,7 +872,7 @@ class HAAssistApp:
     def run(self):
         """Main run method."""
         try:
-            logger.info("Starting GLaSSIST Desktop...")
+            logger.info("Starting WinVE Desktop...")
             self.is_running = True
 
             # Initialize audio manager at startup (both modes need it)
@@ -976,10 +914,6 @@ class HAAssistApp:
             if self.connection_mode == "esphome" and self.audio_manager:
                 self._start_esphome_mode()
 
-            if not self.setup_webview():
-                logger.error("Failed to configure interface")
-                return
-
             self.setup_hotkey()
             self.create_tray_icon()
             self.run_tray()
@@ -988,33 +922,26 @@ class HAAssistApp:
 
             logger.info("Starting interface...")
 
-            def on_window_loaded():
-                import time
-                time.sleep(2)
-                logger.info("Attempting to hide window from taskbar...")
-
-                old_level = logger.level
-                logger.setLevel(10)
-
-                self.hide_from_taskbar()
-                logger.setLevel(old_level)
-
-                # Open settings automatically if --settings flag was passed
-                if self.open_settings_on_start:
-                    logger.info("Opening settings window (--settings flag)")
-                    time.sleep(1)  # Give the app a moment to fully initialize
+            # Open settings automatically if --settings flag was passed
+            if self.open_settings_on_start:
+                def delayed_settings():
+                    import time
+                    time.sleep(3)
                     self.open_settings()
+                threading.Thread(target=delayed_settings, daemon=True).start()
 
-            threading.Thread(target=on_window_loaded, daemon=True).start()
-            
             if self.animations_enabled:
-                webview.start(debug=utils.get_env("DEBUG", False, bool))
+                # Launch Flet overlay (blocks main thread)
+                from flet_overlay import run_overlay
+                animation_port = utils.get_env("ANIMATION_PORT", 8765, int)
+                logger.info(f"Starting Flet overlay on animation port {animation_port}")
+                run_overlay(port=animation_port)
             else:
                 logger.info("Running in headless mode (animations disabled)")
                 try:
                     import time
                     while True:
-                        time.sleep(1)  # Keep main thread alive
+                        time.sleep(1)
                 except KeyboardInterrupt:
                     logger.info("Application interrupted by user")
             
@@ -1218,12 +1145,6 @@ def main():
     """Main application function with configuration validation."""
     import sys
 
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='GLaSSIST - Voice Assistant for Home Assistant')
-    parser.add_argument('--settings', action='store_true',
-                        help='Open settings window automatically after starting the application')
-    args = parser.parse_args()
-
     # Set UTF-8 encoding for console output on Windows
     if sys.platform == "win32":
         try:
@@ -1234,7 +1155,22 @@ def main():
             # Fallback for older Python versions
             os.environ["PYTHONIOENCODING"] = "utf-8"
 
-    print("=== GLaSSIST DESKTOP ===")
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='WinVE - Windows Voice Endpoint for Home Assistant')
+    parser.add_argument('--settings', action='store_true',
+                        help='Open settings window automatically after starting the application')
+    parser.add_argument('--settings-only', action='store_true',
+                        help='Launch only the settings window and exit')
+    args = parser.parse_args()
+
+    if args.settings_only:
+        import flet as ft
+        from flet_settings import FletSettingsApp
+        app = FletSettingsApp()
+        ft.app(target=app.main)
+        sys.exit(0)
+
+    print("=== WinVE DESKTOP ===")
     print("Starting application...")
     print("Pre-initializing audio system...")
     try:
@@ -1244,34 +1180,27 @@ def main():
         print("Audio system ready")
     except Exception as e:
         print(f"Audio initialization warning: {e}")
-    possible_paths = [
-        os.path.join(os.path.dirname(__file__), '.env'),
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'),
-        '.env'
-    ]
-    
+    env_path = utils.get_env_path()
     env_found = False
-    for path in possible_paths:
-        if os.path.exists(path):
-            abs_path = os.path.abspath(path)
-            print(f"📄 USING .ENV FILE: {abs_path}")
-            env_found = True
-            
-            with open(abs_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            lines = content.split('\n')
-            filtered_lines = []
-            for line in lines:
-                if line.startswith('HA_TOKEN=') and len(line) > 20:
-                    filtered_lines.append(f"HA_TOKEN=***HIDDEN*** (length: {len(line.split('=', 1)[1])} chars)")
-                else:
-                    filtered_lines.append(line)
-            
-            print(".ENV FILE CONTENTS:")
-            print('\n'.join(filtered_lines))
-            print("-" * 50)
-            break
+    if os.path.exists(env_path):
+        abs_path = os.path.abspath(env_path)
+        print(f"📄 USING .ENV FILE: {abs_path}")
+        env_found = True
+        
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        lines = content.split('\n')
+        filtered_lines = []
+        for line in lines:
+            if line.startswith('HA_TOKEN=') and len(line) > 20:
+                filtered_lines.append(f"HA_TOKEN=***HIDDEN*** (length: {len(line.split('=', 1)[1])} chars)")
+            else:
+                filtered_lines.append(line)
+        
+        print(".ENV FILE CONTENTS:")
+        print('\n'.join(filtered_lines))
+        print("-" * 50)
     
     if not env_found:
         print("⚠️  NO .ENV FILE - using default settings")
@@ -1299,21 +1228,21 @@ def main():
         'HA_HOTKEY': utils.get_env('HA_HOTKEY', 'ctrl+shift+h'),
         'HA_VAD_MODE': utils.get_env('HA_VAD_MODE', '3'),
         'HA_SOUND_FEEDBACK': utils.get_env('HA_SOUND_FEEDBACK', 'true'),
-        'HA_WAKE_WORD_ENABLED': utils.get_env('HA_WAKE_WORD_ENABLED', 'false'),
+        'HA_WAKE_WORD_ENABLED': utils.get_env('HA_WAKE_WORD_ENABLED', 'true'),
         'DEBUG': utils.get_env('DEBUG', 'false')
     }
     
     for key, value in important_settings.items():
         print(f"   {key} = {value}")
 
-    wake_word_enabled_str = utils.get_env('HA_WAKE_WORD_ENABLED', 'false')
+    wake_word_enabled_str = utils.get_env('HA_WAKE_WORD_ENABLED', 'true')
     if isinstance(wake_word_enabled_str, str):
         wake_word_enabled = wake_word_enabled_str.lower() in ('true', '1', 'yes', 'y', 't')
     else:
         wake_word_enabled = bool(wake_word_enabled_str)
 
     if wake_word_enabled:
-        models = utils.get_env('HA_WAKE_WORD_MODELS', 'alexa')
+        models = utils.get_env('HA_WAKE_WORD_MODELS', 'computer_v2')
         print(f"   HA_WAKE_WORD_MODELS = {models}")
         print(f"   HA_WAKE_WORD_THRESHOLD = {utils.get_env('HA_WAKE_WORD_THRESHOLD', '0.5')}")
         

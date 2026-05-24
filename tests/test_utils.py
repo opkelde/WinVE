@@ -4,6 +4,7 @@ Tests for utils module.
 import pytest
 import os
 import tempfile
+import numpy as np
 from unittest.mock import patch, Mock, mock_open
 import utils
 
@@ -80,23 +81,24 @@ class TestUtils:
         logger = utils.setup_logger()
         assert logger is not None
     
-    @patch('pygame.mixer.init')
-    @patch('pygame.mixer.music.load')
-    @patch('pygame.mixer.music.play')
-    @patch('pygame.mixer.music.get_busy')
+    @patch('utils.sf.read')
+    @patch('utils.sd.play')
     @patch('os.path.exists')
-    def test_play_feedback_sound_success(self, mock_exists, mock_busy, mock_play, mock_load, mock_init):
+    def test_play_feedback_sound_success(self, mock_exists, mock_play, mock_read):
         """Test successful sound playback."""
         mock_exists.return_value = True
-        mock_busy.side_effect = [True, True, False]  # Playing, then stops
+        mock_read.return_value = (np.zeros(100), 16000)
         
         with patch.dict(os.environ, {"HA_SOUND_FEEDBACK": "true"}):
             result = utils.play_feedback_sound("activation")
             assert result is True
+            import time
+            time.sleep(0.1)
+            mock_read.assert_called_once()
+            mock_play.assert_called_once()
     
-    @patch('pygame.mixer.init')
     @patch('os.path.exists')
-    def test_play_feedback_sound_disabled(self, mock_exists, mock_init):
+    def test_play_feedback_sound_disabled(self, mock_exists):
         """Test sound playback when disabled."""
         with patch.dict(os.environ, {"HA_SOUND_FEEDBACK": "false"}):
             result = utils.play_feedback_sound("activation")
@@ -112,29 +114,28 @@ class TestUtils:
             assert result is False
     
     @patch('requests.get')
-    def test_play_audio_from_url_success(self, mock_get):
+    @patch('utils.sf.read')
+    @patch('utils.sd.play')
+    def test_play_audio_from_url_success(self, mock_play, mock_read, mock_get):
         """Test audio playback from URL."""
+        import numpy as np
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.content = b"fake_audio_data"
         mock_get.return_value = mock_response
         
-        with patch('tempfile.NamedTemporaryFile') as mock_temp:
-            mock_temp.return_value.__enter__.return_value.name = "test.wav"
-            with patch('pygame.mixer.init'), \
-                 patch('pygame.mixer.music.load'), \
-                 patch('pygame.mixer.music.play'), \
-                 patch('pygame.mixer.music.get_busy', side_effect=[True, False]):
-                
-                result = utils.play_audio_from_url("http://test.com/audio.wav", "localhost:8123", Mock())
-                assert result is True
+        mock_read.return_value = (np.zeros(100), 16000)
+        
+        result = utils.play_audio_from_url("http://test.com/audio.wav", "localhost:8123", None)
+        assert result is True
+        mock_play.assert_called_once()
     
     @patch('requests.get')
     def test_play_audio_from_url_http_error(self, mock_get):
         """Test audio playback from URL with HTTP error."""
         mock_get.return_value.status_code = 404
         
-        result = utils.play_audio_from_url("http://test.com/audio.wav", "localhost:8123", Mock())
+        result = utils.play_audio_from_url("http://test.com/audio.wav", "localhost:8123", None)
         assert result is False
     
     def test_convert_audio_chunk_to_float32(self):

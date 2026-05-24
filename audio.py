@@ -76,10 +76,24 @@ class AudioManager:
         return microphones
 
     def init_audio(self):
-        """Initialize PyAudio and microphone stream."""
+        """Initialize PyAudio and microphone stream with retry logic."""
+        import time
+        max_attempts = 5
+        retry_delay = 3
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.audio = pyaudio.PyAudio()
+                logger.info(f"PyAudio initialized successfully on attempt {attempt}")
+                break
+            except Exception as e:
+                if attempt == max_attempts:
+                    logger.exception(f"Failed to initialize PyAudio after {max_attempts} attempts: {e}")
+                    return False
+                logger.warning(f"PyAudio initialization attempt {attempt} failed: {e}. Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+        
         try:
-            self.audio = pyaudio.PyAudio()
-            
             mic_device_index = self._find_best_microphone()
             
             if mic_device_index is None:
@@ -127,13 +141,21 @@ class AudioManager:
         default_device = None
         best_device = None
         
+        default_device_index = -1
+        try:
+            default_device_info = self.audio.get_default_input_device_info()
+            if default_device_info:
+                default_device_index = default_device_info.get('index', -1)
+        except Exception as e:
+            logger.debug(f"Error getting default input device info: {e}")
+        
         for i in range(self.audio.get_device_count()):
             try:
                 device_info = self.audio.get_device_info_by_index(i)
                 logger.debug(f"Audio device {i}: {device_info['name']} - input channels: {device_info.get('maxInputChannels', 0)}")
                 
                 if device_info.get('maxInputChannels', 0) > 0:
-                    if i == self.audio.get_default_input_device_info()['index']:
+                    if i == default_device_index:
                         default_device = i
                         logger.info(f"Found default microphone: {device_info['name']}")
                     
@@ -149,20 +171,25 @@ class AudioManager:
     
     def close_audio(self):
         """Close audio stream and PyAudio."""
-        try:
-            if self.stream:
+        if self.stream:
+            try:
                 self.stream.stop_stream()
+            except Exception as e:
+                logger.error(f"Error stopping stream: {e}")
+            try:
                 self.stream.close()
-                self.stream = None
-                logger.info("Audio stream closed")
-            
-            if self.audio:
+            except Exception as e:
+                logger.error(f"Error closing stream: {e}")
+            self.stream = None
+            logger.info("Audio stream closed")
+        
+        if self.audio:
+            try:
                 self.audio.terminate()
-                self.audio = None
-                logger.info("PyAudio terminated")
-                
-        except Exception as e:
-            logger.error(f"Audio closing error: {e}")
+            except Exception as e:
+                logger.error(f"Error terminating PyAudio: {e}")
+            self.audio = None
+            logger.info("PyAudio terminated")
     
     async def record_audio(self, on_chunk_callback, on_end_callback=None):
         """
@@ -182,12 +209,18 @@ class AudioManager:
         
         start_time = time.time()
         chunks_processed = 0
+        no_speech_timeout = utils.get_env("HA_NO_SPEECH_TIMEOUT_SEC", 5.0, float)
         
         try:
             waiting_for_speech = True
             speech_active = False
             
             while True:
+                # Check no-speech timeout
+                if waiting_for_speech and (time.time() - start_time > no_speech_timeout):
+                    logger.info(f"No speech detected (timeout after {no_speech_timeout}s)")
+                    return False
+                
                 try:
                     data = self.stream.read(self.chunk_size, exception_on_overflow=False)
                     chunks_processed += 1

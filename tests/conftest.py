@@ -1,5 +1,5 @@
 """
-Pytest configuration and fixtures for GLaSSIST tests.
+Pytest configuration and fixtures for WinVE tests.
 """
 import pytest
 import os
@@ -18,10 +18,10 @@ def temp_dir():
     yield temp_dir
     shutil.rmtree(temp_dir)
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_env_vars():
     """Mock environment variables for testing."""
-    return {
+    vars = {
         'HA_HOST': 'localhost:8123',
         'HA_TOKEN': 'test_token_123',
         'HA_SAMPLE_RATE': '16000',
@@ -34,6 +34,10 @@ def mock_env_vars():
         'HA_ANIMATIONS_ENABLED': 'true',
         'DEBUG': 'false'
     }
+    import os
+    from unittest.mock import patch
+    with patch.dict(os.environ, vars):
+        yield vars
 
 @pytest.fixture
 def mock_pyaudio():

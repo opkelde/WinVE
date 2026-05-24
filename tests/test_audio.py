@@ -170,14 +170,15 @@ class TestAudioManager:
             Exception("Invalid index"),  # First call for specific index
             {'name': 'Default Microphone', 'maxInputChannels': 1}  # Second call for fallback
         ]
+        mock_audio.get_default_input_device_info.return_value = {'index': 0}
         
         manager = audio.AudioManager()
         manager.audio = mock_audio
         
-        with patch.object(manager, '_find_default_microphone', return_value=0):
+        with patch.object(manager, '_auto_find_microphone', return_value=0):
             result = manager._find_best_microphone()
             assert result == 0
-    
+     
     @patch('pyaudio.PyAudio')
     def test_find_default_microphone_success(self, mock_pyaudio):
         """Test finding default microphone successfully."""
@@ -188,14 +189,15 @@ class TestAudioManager:
             {'name': 'Speaker', 'maxInputChannels': 0},  # Not input device
             {'name': 'Microphone', 'maxInputChannels': 1}  # Input device
         ]
+        mock_audio.get_default_input_device_info.return_value = {'index': 1}
         
         manager = audio.AudioManager()
         manager.audio = mock_audio
         
-        result = manager._find_default_microphone()
+        result = manager._auto_find_microphone()
         
         assert result == 1
-    
+     
     @patch('pyaudio.PyAudio')
     def test_find_default_microphone_none_found(self, mock_pyaudio):
         """Test finding default microphone when none available."""
@@ -206,11 +208,12 @@ class TestAudioManager:
             'name': 'Speaker',
             'maxInputChannels': 0
         }
+        mock_audio.get_default_input_device_info.side_effect = Exception("No default device")
         
         manager = audio.AudioManager()
         manager.audio = mock_audio
         
-        result = manager._find_default_microphone()
+        result = manager._auto_find_microphone()
         
         assert result is None
     
@@ -228,7 +231,7 @@ class TestAudioManager:
         manager.stream.read.return_value = audio_data
         
         # Mock VAD responses
-        manager.vad.is_speech.side_effect = [True, True, False]  # Speech detected, then silence
+        manager.vad.process_audio.side_effect = [(True, False), (True, False), (True, True)]  # Speech detected, then silence
         
         chunk_callback = Mock()
         end_callback = Mock()
@@ -253,7 +256,7 @@ class TestAudioManager:
         manager.stream.read.return_value = audio_data
         
         # Mock VAD - no speech detected
-        manager.vad.is_speech.return_value = False
+        manager.vad.process_audio.return_value = (False, False)
         
         chunk_callback = Mock()
         end_callback = Mock()
@@ -267,26 +270,30 @@ class TestAudioManager:
     def test_close_audio_success(self):
         """Test successful audio cleanup."""
         manager = audio.AudioManager()
-        manager.stream = Mock()
-        manager.audio = Mock()
+        stream = Mock()
+        py_audio = Mock()
+        manager.stream = stream
+        manager.audio = py_audio
         
         manager.close_audio()
         
-        manager.stream.stop_stream.assert_called_once()
-        manager.stream.close.assert_called_once()
-        manager.audio.terminate.assert_called_once()
+        stream.stop_stream.assert_called_once()
+        stream.close.assert_called_once()
+        py_audio.terminate.assert_called_once()
         assert manager.stream is None
         assert manager.audio is None
     
     def test_close_audio_with_errors(self):
         """Test audio cleanup with errors."""
         manager = audio.AudioManager()
-        manager.stream = Mock()
-        manager.audio = Mock()
+        stream = Mock()
+        py_audio = Mock()
+        manager.stream = stream
+        manager.audio = py_audio
         
         # Mock exceptions during cleanup
-        manager.stream.stop_stream.side_effect = Exception("Stream error")
-        manager.audio.terminate.side_effect = Exception("Audio error")
+        stream.stop_stream.side_effect = Exception("Stream error")
+        py_audio.terminate.side_effect = Exception("Audio error")
         
         # Should not raise exceptions
         manager.close_audio()

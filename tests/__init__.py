@@ -1,3 +1,3 @@
 """
-Tests package for GLaSSIST Desktop Voice Assistant.
+Tests package for WinVE Desktop Voice Assistant.
 """

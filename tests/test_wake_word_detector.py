@@ -65,7 +65,7 @@ class TestWakeWordDetector:
         with patch.dict('os.environ', {}, clear=True):
             detector = wake_word_detector.WakeWordDetector()
             models = detector._get_selected_models()
-            assert models == ['alexa']
+            assert models == ['computer_v2']
     
     @patch('os.makedirs')
     @patch('os.path.exists')
@@ -74,8 +74,8 @@ class TestWakeWordDetector:
         mock_exists.return_value = False
         
         detector = wake_word_detector.WakeWordDetector()
-        detector._ensure_models_directory()
         
+        # When creating detector, it calls _ensure_models_directory inside __init__
         mock_makedirs.assert_called_once()
     
     @patch('os.makedirs')
@@ -117,12 +117,14 @@ class TestWakeWordDetector:
             assert detector.model is None
             assert detector.enabled is False
     
-    @patch('os.listdir')
     @patch('os.path.exists')
-    def test_get_model_paths_success(self, mock_exists, mock_listdir):
+    def test_get_model_paths_success(self, mock_exists):
         """Test getting model paths successfully."""
-        mock_exists.return_value = True
-        mock_listdir.return_value = ['alexa.onnx', 'jarvis.tflite', 'other.txt']
+        def side_effect(path):
+            if path.endswith(('alexa.onnx', 'jarvis.tflite', 'models')):
+                return True
+            return False
+        mock_exists.side_effect = side_effect
         
         detector = wake_word_detector.WakeWordDetector()
         detector.selected_models = ['alexa', 'jarvis']
@@ -133,12 +135,14 @@ class TestWakeWordDetector:
         assert any('alexa.onnx' in path for path in paths)
         assert any('jarvis.tflite' in path for path in paths)
     
-    @patch('os.listdir')
     @patch('os.path.exists')
-    def test_get_model_paths_missing_models(self, mock_exists, mock_listdir):
+    def test_get_model_paths_missing_models(self, mock_exists):
         """Test getting model paths with missing models."""
-        mock_exists.return_value = True
-        mock_listdir.return_value = ['alexa.onnx']
+        def side_effect(path):
+            if path.endswith(('alexa.onnx', 'models')):
+                return True
+            return False
+        mock_exists.side_effect = side_effect
         
         detector = wake_word_detector.WakeWordDetector()
         detector.selected_models = ['alexa', 'nonexistent']
@@ -148,13 +152,14 @@ class TestWakeWordDetector:
         assert len(paths) == 1
         assert 'alexa.onnx' in paths[0]
     
+    @patch('os.makedirs')
     @patch('os.path.exists')
-    def test_get_model_paths_no_directory(self, mock_exists):
+    def test_get_model_paths_no_directory(self, mock_exists, mock_makedirs):
         """Test getting model paths when directory doesn't exist."""
         mock_exists.return_value = False
         
         detector = wake_word_detector.WakeWordDetector()
-        detector.selected_models = ['alexa']
+        detector.selected_models = ['custom_nonexistent_model']
         
         paths = detector._get_model_paths()
         
@@ -172,12 +177,13 @@ class TestWakeWordDetector:
         detector.enabled = True
         detector.model = Mock()
         
-        result = detector.start_detection()
-        
-        assert result is True
-        assert detector.is_running is True
-        assert detector.audio == mock_audio
-        assert detector.stream == mock_stream
+        with patch.object(detector, '_find_microphone', return_value=0):
+            result = detector.start_detection()
+            
+            assert result is True
+            assert detector.is_running is True
+            assert detector.audio == mock_audio
+            assert detector.stream == mock_stream
     
     def test_start_detection_disabled(self):
         """Test starting detection when disabled."""
@@ -231,15 +237,17 @@ class TestWakeWordDetector:
         """Test successful detection stop."""
         detector = wake_word_detector.WakeWordDetector()
         detector.is_running = True
-        detector.stream = Mock()
-        detector.audio = Mock()
+        mock_stream = Mock()
+        mock_audio = Mock()
+        detector.stream = mock_stream
+        detector.audio = mock_audio
         
         detector.stop_detection()
         
         assert detector.is_running is False
-        detector.stream.stop_stream.assert_called_once()
-        detector.stream.close.assert_called_once()
-        detector.audio.terminate.assert_called_once()
+        mock_stream.stop_stream.assert_called_once()
+        mock_stream.close.assert_called_once()
+        mock_audio.terminate.assert_called_once()
     
     def test_stop_detection_not_running(self):
         """Test stopping detection when not running."""
@@ -267,54 +275,39 @@ class TestWakeWordDetector:
         
         assert detector.is_running is False
     
-    def test_process_audio_wake_word_detected(self):
-        """Test audio processing with wake word detection."""
+    def test_process_predictions_wake_word_detected(self):
+        """Test predictions processing with wake word detection."""
         callback = Mock()
         detector = wake_word_detector.WakeWordDetector(callback)
-        detector.model = Mock()
         detector.detection_threshold = 0.5
+        detector.selected_models = ['alexa', 'jarvis']
         
-        # Mock model prediction
-        detector.model.predict.return_value = {'alexa': 0.7, 'jarvis': 0.3}
-        
-        # Create test audio data
-        audio_data = np.random.randint(-32768, 32767, 1280, dtype=np.int16).tobytes()
-        
-        detector._process_audio(audio_data)
+        predictions = {'alexa': 0.7, 'jarvis': 0.3}
+        detector._process_predictions(predictions)
         
         callback.assert_called_once_with('alexa', 0.7)
     
-    def test_process_audio_no_detection(self):
-        """Test audio processing without wake word detection."""
+    def test_process_predictions_no_detection(self):
+        """Test predictions processing without wake word detection."""
         callback = Mock()
         detector = wake_word_detector.WakeWordDetector(callback)
-        detector.model = Mock()
         detector.detection_threshold = 0.5
+        detector.selected_models = ['alexa', 'jarvis']
         
-        # Mock model prediction below threshold
-        detector.model.predict.return_value = {'alexa': 0.3, 'jarvis': 0.2}
-        
-        # Create test audio data
-        audio_data = np.random.randint(-32768, 32767, 1280, dtype=np.int16).tobytes()
-        
-        detector._process_audio(audio_data)
+        predictions = {'alexa': 0.3, 'jarvis': 0.2}
+        detector._process_predictions(predictions)
         
         callback.assert_not_called()
     
-    def test_process_audio_exception(self):
-        """Test audio processing with exception."""
-        callback = Mock()
+    def test_process_predictions_callback_exception(self):
+        """Test predictions processing when callback raises an exception."""
+        callback = Mock(side_effect=Exception("Callback error"))
         detector = wake_word_detector.WakeWordDetector(callback)
-        detector.model = Mock()
-        detector.model.predict.side_effect = Exception("Model error")
-        
-        # Create test audio data
-        audio_data = np.random.randint(-32768, 32767, 1280, dtype=np.int16).tobytes()
+        detector.detection_threshold = 0.5
+        detector.selected_models = ['alexa']
         
         # Should not raise exception
-        detector._process_audio(audio_data)
-        
-        callback.assert_not_called()
+        detector._process_predictions({'alexa': 0.7})
     
     def test_get_model_info_enabled(self):
         """Test getting model info when enabled."""
@@ -367,14 +360,17 @@ class TestWakeWordDetector:
         assert 'hal' in models
         assert 'other' not in models  # Should not include .txt files
     
+    @patch('wake_word_detector.utils.get_env')
     @patch('wake_word_detector.WakeWordDetector._init_openwakeword')
-    def test_reload_models_success(self, mock_init):
+    def test_reload_models_success(self, mock_init, mock_get_env):
         """Test successful model reloading."""
+        mock_get_env.return_value = True
         detector = wake_word_detector.WakeWordDetector()
         detector.enabled = True
         detector.is_running = True
         detector.model = Mock()
         
+        mock_init.reset_mock()
         with patch.object(detector, 'stop_detection'), \
              patch.object(detector, 'start_detection', return_value=True):
             
@@ -383,20 +379,25 @@ class TestWakeWordDetector:
             assert result is True
             mock_init.assert_called_once()
     
+    @patch('wake_word_detector.utils.get_env')
     @patch('wake_word_detector.WakeWordDetector._init_openwakeword')
-    def test_reload_models_disabled(self, mock_init):
+    def test_reload_models_disabled(self, mock_init, mock_get_env):
         """Test model reloading when disabled."""
+        mock_get_env.return_value = False
         detector = wake_word_detector.WakeWordDetector()
         detector.enabled = False
         
+        mock_init.reset_mock()
         result = detector.reload_models()
         
         assert result is False
         mock_init.assert_not_called()
     
+    @patch('wake_word_detector.utils.get_env')
     @patch('wake_word_detector.WakeWordDetector._init_openwakeword')
-    def test_reload_models_start_failure(self, mock_init):
+    def test_reload_models_start_failure(self, mock_init, mock_get_env):
         """Test model reloading with start failure."""
+        mock_get_env.return_value = True
         detector = wake_word_detector.WakeWordDetector()
         detector.enabled = True
         detector.is_running = True
@@ -408,6 +409,32 @@ class TestWakeWordDetector:
             result = detector.reload_models()
             
             assert result is False
+
+    def test_get_clean_model_name(self):
+        """Test cleaning of model names."""
+        from wake_word_detector import get_clean_model_name
+        assert get_clean_model_name("alexa") == "alexa"
+        assert get_clean_model_name("alexa.onnx") == "alexa"
+        assert get_clean_model_name("hey_jarvis.tflite") == "hey_jarvis"
+        assert get_clean_model_name("c:\\path\\to\\models\\alexa.onnx") == "alexa"
+        assert get_clean_model_name("/path/to/models/hey_mycroft.tflite") == "hey_mycroft"
+
+    @patch('os.makedirs')
+    @patch('os.path.exists', return_value=False)
+    def test_get_model_paths_default_model_fallback(self, mock_exists, mock_makedirs):
+        """Test fallback to default models when not found locally."""
+        detector = wake_word_detector.WakeWordDetector()
+        detector.selected_models = ['alexa', 'hey jarvis', 'custom_nonexistent']
+        
+        paths = detector._get_model_paths()
+        
+        # 'alexa' and 'hey jarvis' (normalized to 'hey_jarvis') are default models,
+        # 'custom_nonexistent' is not.
+        assert len(paths) == 2
+        assert 'alexa' in paths
+        assert 'hey_jarvis' in paths
+
+
 
 
 def test_validate_wake_word_config():

@@ -1,15 +1,15 @@
 """
-GLaSSIST ESPHome Voice Satellite Protocol.
+WinVE ESPHome Voice Satellite Protocol.
 
 Implements the ESPHome voice satellite protocol on top of ESPhomeAPIServer.
-Home Assistant connects to this server and treats GLaSSIST as a voice satellite
+Home Assistant connects to this server and treats WinVE as a voice satellite
 device — enabling timers, conversation mode, and push announcements.
 
 Architecture:
-  - HA connects to GLaSSIST TCP server (port 6053 by default)
-  - GLaSSIST streams microphone audio to HA via VoiceAssistantAudio messages
+  - HA connects to WinVE TCP server (port 6053 by default)
+  - WinVE streams microphone audio to HA via VoiceAssistantAudio messages
   - HA sends TTS URL back via VoiceAssistantEventResponse (TTS_END)
-  - GLaSSIST plays TTS locally using existing utils.play_audio_from_url()
+  - WinVE plays TTS locally using existing utils.play_audio_from_url()
 
 Features enabled via feature flags:
   - VOICE_ASSISTANT + API_AUDIO: core pipeline
@@ -105,7 +105,7 @@ def _make_mac_address() -> str:
 
 class VoiceSatelliteProtocol(ESPhomeAPIServer):
     """
-    GLaSSIST voice satellite — ESPHome protocol implementation.
+    WinVE voice satellite — ESPHome protocol implementation.
 
     Lifecycle managed by SatelliteServer.start() / SatelliteServer.stop().
     Audio chunks are fed via handle_audio(). Wake word triggers are sent via wakeup().
@@ -140,6 +140,8 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
         self._timer_active = False
         self._speech_end_handled = False
         self._known_timer_ids: Set[str] = set()  # timers started in this session
+        self._volumes_managed = False
+        self._saved_volumes = None
 
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -221,7 +223,7 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
 
         elif isinstance(msg, VoiceAssistantConfigurationRequest):
             yield VoiceAssistantConfigurationResponse(
-                available_wake_words=[],  # GLaSSIST handles wake words locally
+                available_wake_words=[],  # WinVE handles wake words locally
                 active_wake_words=[],
                 max_active_wake_words=0,
             )
@@ -229,7 +231,7 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
             self._set_animation("idle")
 
         elif isinstance(msg, VoiceAssistantSetConfiguration):
-            pass  # Wake words managed locally by GLaSSIST
+            pass  # Wake words managed locally by WinVE
 
     def process_packet(self, msg_type: int, packet_data: bytes) -> None:
         super().process_packet(msg_type, packet_data)
@@ -256,6 +258,8 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
             self._block_wake_words = True
             self._speech_end_handled = False
             self._set_animation("listening")
+            if self._loop and self._loop.is_running():
+                self._loop.create_task(self._lower_media_volumes())
 
         elif event_type in (
             VoiceAssistantEventType.VOICE_ASSISTANT_STT_VAD_END,
@@ -295,6 +299,8 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
             if not self._tts_played:
                 self._tts_finished()
             self._tts_played = False
+            if self._loop and self._loop.is_running():
+                self._loop.create_task(self._restore_media_volumes())
 
         elif event_type == VoiceAssistantEventType.VOICE_ASSISTANT_ERROR:
             code = data.get("code", "")
@@ -305,6 +311,8 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
             self._block_wake_words = False
             self._speech_end_handled = False
             self._set_animation("error")
+            if self._loop and self._loop.is_running():
+                self._loop.create_task(self._restore_media_volumes())
 
     def _handle_timer_event(self, event_type: VoiceAssistantTimerEventType, timer_id: str = "") -> None:
         _LOGGER.debug("Timer event: %s (id=%s)", event_type.name, timer_id)
@@ -510,8 +518,8 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
             uses_password=False,
             name=device_name,
             mac_address=self._mac_address,
-            manufacturer="GLaSSIST",
-            model="GLaSSIST Voice Satellite",
+            manufacturer="WinVE",
+            model="WinVE Voice Satellite",
             voice_assistant_feature_flags=(
                 VoiceAssistantFeature.VOICE_ASSISTANT
                 | VoiceAssistantFeature.API_AUDIO
@@ -570,6 +578,61 @@ class VoiceSatelliteProtocol(ESPhomeAPIServer):
                 self._animation_server.show_connecting("Connecting...")
             except Exception:
                 pass
+
+    async def _lower_media_volumes(self) -> None:
+        """Lower volumes of configured Home Assistant media players (volume ducking)."""
+        entities_config = utils.get_env("HA_MEDIA_PLAYER_ENTITIES", "")
+        if not entities_config:
+            return
+
+        token = utils.get_env("HA_TOKEN")
+        if not token:
+            _LOGGER.debug("HA_TOKEN not configured; skipping volume ducking")
+            return
+
+        media_player_entities = [e.strip() for e in entities_config.split(',') if e.strip()]
+        if not media_player_entities:
+            return
+
+        target_volume = utils.get_env("HA_MEDIA_PLAYER_TARGET_VOLUME", 0.3, float)
+
+        try:
+            from client import HomeAssistantClient
+            client = HomeAssistantClient()
+            if await client.connect():
+                _LOGGER.info("Connected to HA for volume ducking. Retrieving current volumes...")
+                saved_volumes = await client.get_multiple_volumes(media_player_entities)
+                if saved_volumes:
+                    self._saved_volumes = saved_volumes
+                    self._volumes_managed = True
+                    target_settings = {entity_id: target_volume for entity_id in saved_volumes.keys()}
+                    await client.set_multiple_volumes(target_settings)
+                    _LOGGER.info("Ducked volumes to %s for entities: %s", target_volume, list(saved_volumes.keys()))
+                await client.close()
+        except Exception as e:
+            _LOGGER.error("Error ducking media volumes: %s", e)
+
+    async def _restore_media_volumes(self) -> None:
+        """Restore volumes of configured Home Assistant media players."""
+        if not getattr(self, "_volumes_managed", False) or not getattr(self, "_saved_volumes", None):
+            return
+
+        token = utils.get_env("HA_TOKEN")
+        if not token:
+            return
+
+        try:
+            from client import HomeAssistantClient
+            client = HomeAssistantClient()
+            if await client.connect():
+                _LOGGER.info("Connected to HA for volume restoration. Restoring volumes...")
+                await client.set_multiple_volumes(self._saved_volumes)
+                _LOGGER.info("Restored volumes successfully.")
+                self._volumes_managed = False
+                self._saved_volumes = None
+                await client.close()
+        except Exception as e:
+            _LOGGER.error("Error restoring media volumes: %s", e)
 
 
 class SatelliteServer:
@@ -634,7 +697,7 @@ class SatelliteServer:
         await self._register_mdns()
 
     async def _register_mdns(self) -> None:
-        """Register as an ESPHome device via mDNS so HA can auto-discover GLaSSIST."""
+        """Register as an ESPHome device via mDNS so HA can auto-discover WinVE."""
         import socket
         try:
             from zeroconf import ServiceInfo
@@ -676,7 +739,7 @@ class SatelliteServer:
             self._zeroconf = AsyncZeroconf()
             await self._zeroconf.async_register_service(self._zeroconf_info)
             _LOGGER.info(
-                "mDNS: registered '%s' at %s:%d — HA can now auto-discover GLaSSIST",
+                "mDNS: registered '%s' at %s:%d — HA can now auto-discover WinVE",
                 service_slug,
                 local_ip,
                 self._port,

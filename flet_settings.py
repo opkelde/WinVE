@@ -1,5 +1,5 @@
 """
-Flet-based settings dialog for GLaSSIST Desktop
+Flet-based settings dialog for WinVE Desktop
 Replaces the problematic Tkinter-based settings
 """
 import flet as ft
@@ -22,10 +22,11 @@ class FletSettingsApp:
         self.test_client = None
         self.mic_mapping = {}
         self.output_device_mapping = {}
+        self.current_settings = {}
         
     async def main(self, page: ft.Page):
         """Main Flet application entry point"""
-        page.title = "GLaSSIST Settings"
+        page.title = "WinVE Settings"
         page.theme_mode = ft.ThemeMode.SYSTEM
         page.window_width = 1400
         page.window_height = 1000
@@ -68,7 +69,7 @@ class FletSettingsApp:
                 logger.info("Settings window closing...")
                 try:
                     # Cleanup and close
-                    page.window_destroy()
+                    page.window.destroy()
                 except:
                     pass
         
@@ -78,7 +79,7 @@ class FletSettingsApp:
         def on_keyboard(e):
             if e.key == "Escape":
                 logger.info("Escape pressed - closing settings")
-                page.window_close()
+                page.window.close()
         
         page.on_keyboard_event = on_keyboard
         
@@ -92,7 +93,7 @@ class FletSettingsApp:
     def _load_current_settings(self):
         """Load current settings from environment"""
         return {
-            'HA_HOST': utils.get_env('HA_HOST', 'localhost:8123'),
+            'HA_HOST': utils.get_env('HA_HOST', ''),
             'HA_TOKEN': utils.get_env('HA_TOKEN', ''),
             'HA_PIPELINE_ID': utils.get_env('HA_PIPELINE_ID', ''),
             'HA_HOTKEY': utils.get_env('HA_HOTKEY', 'ctrl+shift+h'),
@@ -108,8 +109,8 @@ class FletSettingsApp:
             'HA_SAMPLE_RATE': utils.get_env('HA_SAMPLE_RATE', '16000'),
             'HA_FRAME_DURATION_MS': utils.get_env('HA_FRAME_DURATION_MS', '30'),
             'ANIMATION_PORT': utils.get_env('ANIMATION_PORT', '8765'),
-            'HA_WAKE_WORD_ENABLED': utils.get_env('HA_WAKE_WORD_ENABLED', 'false'),
-            'HA_WAKE_WORD_MODELS': utils.get_env('HA_WAKE_WORD_MODELS', 'alexa'),
+            'HA_WAKE_WORD_ENABLED': utils.get_env('HA_WAKE_WORD_ENABLED', 'true'),
+            'HA_WAKE_WORD_MODELS': utils.get_env('HA_WAKE_WORD_MODELS', 'computer_v2'),
             'HA_WAKE_WORD_THRESHOLD': utils.get_env('HA_WAKE_WORD_THRESHOLD', 0.5, float),
             'HA_WAKE_WORD_VAD_THRESHOLD': utils.get_env('HA_WAKE_WORD_VAD_THRESHOLD', 0.3, float),
             'HA_WAKE_WORD_NOISE_SUPPRESSION': utils.get_env('HA_WAKE_WORD_NOISE_SUPPRESSION', 'false'),
@@ -117,20 +118,47 @@ class FletSettingsApp:
             'HA_MEDIA_PLAYER_TARGET_VOLUME': utils.get_env('HA_MEDIA_PLAYER_TARGET_VOLUME', 0.3, float),
             'HA_TIMER_SOUND': utils.get_env('HA_TIMER_SOUND', ''),
             'HA_CONTINUE_ON_QUESTION': utils.get_env('HA_CONTINUE_ON_QUESTION', 'false'),
-            'CONNECTION_MODE': utils.get_env('CONNECTION_MODE', 'websocket'),
-            'DEVICE_NAME': utils.get_env('DEVICE_NAME', 'GLaSSIST'),
+            'CONNECTION_MODE': utils.get_env('CONNECTION_MODE', 'esphome'),
+            'DEVICE_NAME': utils.get_env('DEVICE_NAME', 'WinVE'),
             'ESPHOME_PORT': utils.get_env('ESPHOME_PORT', '6053'),
         }
     
     async def _create_ui(self, current_settings):
         """Create the main UI"""
+        self.current_settings = current_settings
+
+        # Create fields that are shared or needed by multiple tabs
+        self.host_field = ft.TextField(
+            label="Home Assistant Server Address",
+            value=current_settings['HA_HOST'],
+            prefix_icon=ft.Icons.HOME,
+            helper_text="e.g., homeassistant.local:8123 or 192.168.1.100:8123",
+            expand=True
+        )
+        
+        self.token_field = ft.TextField(
+            label="Long-Lived Access Token",
+            value=current_settings['HA_TOKEN'],
+            password=True,
+            can_reveal_password=True,
+            prefix_icon=ft.Icons.KEY,
+            helper_text="Generate in Home Assistant: Profile → Long-Lived Access Tokens",
+            expand=True
+        )
+        
+        self.connection_status = ft.Text(
+            "Click 'Test HA Connection' to verify settings",
+            size=14,
+            color=ft.Colors.GREY_600
+        )
+
         # Title with icon
         title = ft.Container(
             content=ft.Column([
                 ft.Row([
                     ft.Icon(ft.Icons.SETTINGS, size=32, color=ft.Colors.BLUE_600),
                     ft.Text(
-                        "GLaSSIST Desktop Settings",
+                        "WinVE Settings",
                         size=28,
                         weight=ft.FontWeight.BOLD,
                         color=ft.Colors.BLUE_800
@@ -188,11 +216,6 @@ class FletSettingsApp:
         
         # Action buttons
         button_row = ft.Row([
-            ft.FilledTonalButton(
-                "Test Connection", 
-                icon=ft.Icons.WIFI_FIND,
-                on_click=self._test_connection_async
-            ),
             ft.FilledButton(
                 "Save Settings",
                 icon=ft.Icons.SAVE,
@@ -238,21 +261,10 @@ class FletSettingsApp:
     
     async def _create_connection_tab(self, current_settings):
         """Create connection settings tab"""
-        # Connection mode selector
-        self.connection_mode_dropdown = ft.Dropdown(
-            label="Connection Mode",
-            value=current_settings.get('CONNECTION_MODE', 'websocket'),
-            options=[
-                ft.dropdown.Option("websocket", "WebSocket — GLaSSIST connects to HA"),
-                ft.dropdown.Option("esphome", "ESPHome Satellite — HA connects to GLaSSIST"),
-            ],
-            expand=True,
-        )
-
         # ESPHome fields
         self.device_name_field = ft.TextField(
             label="Device Name",
-            value=current_settings.get('DEVICE_NAME', 'GLaSSIST'),
+            value=current_settings.get('DEVICE_NAME', 'WinVE'),
             prefix_icon=ft.Icons.DEVICES,
             helper_text="Name shown in Home Assistant device list",
             expand=True,
@@ -265,127 +277,16 @@ class FletSettingsApp:
             expand=True,
         )
 
-        # Input fields
-        self.host_field = ft.TextField(
-            label="Home Assistant Server Address",
-            value=current_settings['HA_HOST'],
-            prefix_icon=ft.Icons.HOME,
-            helper_text="e.g., homeassistant.local:8123 or 192.168.1.100:8123",
-            expand=True
-        )
-        
-        self.token_field = ft.TextField(
-            label="Long-Lived Access Token",
-            value=current_settings['HA_TOKEN'],
-            password=True,
-            can_reveal_password=True,
-            prefix_icon=ft.Icons.KEY,
-            helper_text="Generate in Home Assistant: Profile → Long-Lived Access Tokens",
-            expand=True
-        )
-        
-        # Status display
-        self.connection_status = ft.Text(
-            "Click 'Test Connection' to verify settings",
-            size=14,
-            color=ft.Colors.GREY_600
-        )
-        
-        # Pipeline dropdown  
-        self.pipeline_dropdown = ft.Dropdown(
-            label="Assist Pipeline",
-            helper_text="Test connection first to load available pipelines",
-            options=[ft.dropdown.Option("(default)", "")],
-            value="",
-            expand=True
-        )
-        
-        # Set current pipeline
-        current_pipeline = current_settings.get('HA_PIPELINE_ID', '')
-        if current_pipeline:
-            self.pipeline_dropdown.options.append(
-                ft.dropdown.Option(f"Current: {current_pipeline}", current_pipeline)
-            )
-            self.pipeline_dropdown.value = current_pipeline
-        
         return ft.Container(
             content=ft.Column([
-                # Connection mode card
-                ft.Card(
-                    content=ft.Container(
-                        content=ft.Column([
-                            ft.Text("🔌 Connection Mode", size=18, weight=ft.FontWeight.BOLD),
-                            ft.Text(
-                                "WebSocket: GLaSSIST connects to HA (standard mode).\n"
-                                "ESPHome Satellite: HA discovers GLaSSIST as a smart speaker device — enables timers, conversation mode.",
-                                color=ft.Colors.GREY_700,
-                                size=13,
-                            ),
-                            ft.Container(height=8),
-                            self.connection_mode_dropdown,
-                        ]),
-                        padding=20,
-                    ),
-                    elevation=2,
-                ),
-
-                # WebSocket connection settings card
-                ft.Card(
-                    content=ft.Container(
-                        content=ft.Column([
-                            ft.Text("🔗 WebSocket Settings", size=18, weight=ft.FontWeight.BOLD),
-                            self.host_field,
-                            self.token_field,
-                            ft.Container(height=10),
-                            ft.Row([
-                                ft.ElevatedButton(
-                                    "Test Connection",
-                                    icon=ft.Icons.WIFI_FIND,
-                                    on_click=self._test_connection_async
-                                ),
-                                ft.Container(expand=True),
-                                self.connection_status
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        ]),
-                        padding=20
-                    ),
-                    elevation=2
-                ),
-                
-                # Pipeline selection card
-                ft.Card(
-                    content=ft.Container(
-                        content=ft.Column([
-                            ft.Text("🎯 Pipeline Selection", size=18, weight=ft.FontWeight.BOLD),
-                            ft.Text(
-                                "Pipeline determines how the assistant processes your voice commands. "
-                                "Different pipelines may use different STT/TTS engines or languages.",
-                                color=ft.Colors.GREY_700,
-                                size=13
-                            ),
-                            ft.Container(height=10),
-                            ft.Row([
-                                self.pipeline_dropdown,
-                                ft.ElevatedButton(
-                                    "Refresh",
-                                    icon=ft.Icons.REFRESH,
-                                    on_click=self._refresh_pipelines_async
-                                )
-                            ], spacing=10)
-                        ]),
-                        padding=20
-                    ),
-                    elevation=2
-                ),
-
                 # ESPHome satellite card
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
                             ft.Text("📡 ESPHome Satellite Settings", size=18, weight=ft.FontWeight.BOLD),
                             ft.Text(
-                                "Used only when Connection Mode is set to ESPHome Satellite. "
-                                "Home Assistant will discover this device automatically via mDNS.",
+                                "WinVE runs as a native ESPHome voice satellite. "
+                                "Home Assistant will discover this device automatically via mDNS or you can add it manually using the ESPHome integration.",
                                 color=ft.Colors.GREY_700,
                                 size=13,
                             ),
@@ -496,17 +397,6 @@ class FletSettingsApp:
 
         # Load output devices asynchronously
         await self._refresh_output_devices_async()
-        
-        
-        # Auto-refresh pipelines if we have connection details
-        host = self.host_field.value.strip()
-        token = self.token_field.value.strip()
-        if host and token:
-            try:
-                # Try to load pipelines in background
-                asyncio.create_task(self._auto_load_pipelines(host, token))
-            except Exception as e:
-                logger.debug(f"Could not auto-load pipelines: {e}")
         
         return ft.Container(
             content=ft.Column([
@@ -832,13 +722,43 @@ class FletSettingsApp:
         
         return ft.Container(
             content=ft.Column([
+                # HA Connection Card for media players
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("🔗 Home Assistant Integration (Optional)", size=18, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                "WinVE can connect to Home Assistant to lower the volume of your media players (speakers, TVs, etc.) "
+                                "when you are speaking to the voice assistant, and restore it afterwards.",
+                                color=ft.Colors.GREY_700,
+                                size=13
+                            ),
+                            ft.Container(height=5),
+                            self.host_field,
+                            self.token_field,
+                            ft.Container(height=10),
+                            ft.Row([
+                                ft.ElevatedButton(
+                                    "Test HA Connection",
+                                    icon=ft.Icons.WIFI_FIND,
+                                    on_click=self._test_connection_async
+                                ),
+                                ft.Container(expand=True),
+                                self.connection_status
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ]),
+                        padding=20
+                    ),
+                    elevation=2
+                ),
+                
                 # Configuration card
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
                             ft.Text("🔊 Volume Management Configuration", size=18, weight=ft.FontWeight.BOLD),
                             ft.Text(
-                                "GLaSSIST can automatically adjust media player volumes during voice interactions. "
+                                "WinVE can automatically adjust media player volumes during voice interactions. "
                                 "Select media players below or enter entity IDs manually.",
                                 color=ft.Colors.GREY_700,
                                 size=13
@@ -1053,47 +973,23 @@ class FletSettingsApp:
         return ft.Container(
             content=ft.Column([
                 ft.Container(height=40),
-                ft.Text("🎤 GLaSSIST Desktop", size=32, weight=ft.FontWeight.BOLD,
+                ft.Text("🎤 WinVE Desktop", size=32, weight=ft.FontWeight.BOLD,
                        text_align=ft.TextAlign.CENTER),
-                ft.Text("Voice Assistant for Home Assistant", size=18, color=ft.Colors.GREY_600,
+                ft.Text("Windows Voice Endpoint for Home Assistant", size=18, color=ft.Colors.GREY_600,
                        text_align=ft.TextAlign.CENTER),
                 ft.Container(height=40),
                 
-                # Creator card
+                # License card
                 ft.Card(
                     content=ft.Container(
                         content=ft.Column([
-                            ft.Text("👨‍💻 Created by", size=18, weight=ft.FontWeight.BOLD,
+                            ft.Text("📄 License", size=18, weight=ft.FontWeight.BOLD,
                                    text_align=ft.TextAlign.CENTER),
-                            ft.Text("Patryk Smoliński", size=24, weight=ft.FontWeight.BOLD,
-                                   text_align=ft.TextAlign.CENTER, color=ft.Colors.BLUE_600),
-                            ft.Container(height=15),
-                            ft.ElevatedButton(
-                                "🔗 Visit GitHub Profile",
-                                icon=ft.Icons.OPEN_IN_NEW,
-                                on_click=lambda _: webbrowser.open("https://github.com/SmolinskiP")
-                            )
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                        padding=30
-                    ),
-                    elevation=2
-                ),
-                
-                # Support card
-                ft.Card(
-                    content=ft.Container(
-                        content=ft.Column([
-                            ft.Text("☕ Support the Project", size=18, weight=ft.FontWeight.BOLD,
-                                   text_align=ft.TextAlign.CENTER),
-                            ft.Text("Like my work? Buy me a coffee!", size=16,
+                            ft.Text("Licensed under the MIT License.", size=16,
                                    text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_700),
-                            ft.Container(height=15),
-                            ft.ElevatedButton(
-                                "☕ Buy me a coffee",
-                                icon=ft.Icons.FAVORITE,
-                                style=ft.ButtonStyle(bgcolor=ft.Colors.ORANGE_600),
-                                on_click=lambda _: webbrowser.open("https://buymeacoffee.com/smolinskip")
-                            )
+                            ft.Container(height=10),
+                            ft.Text("WinVE is open-source software. You are free to modify and distribute it under the terms of the MIT license.",
+                                   size=13, text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_600),
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         padding=30
                     ),
@@ -1172,9 +1068,7 @@ class FletSettingsApp:
             # Test connection in thread to avoid blocking UI
             def test_connection():
                 try:
-                    test_client = HomeAssistantClient()
-                    test_client.host = host
-                    test_client.token = token
+                    test_client = HomeAssistantClient(host=host, token=token)
                     
                     # Run in new event loop
                     loop = asyncio.new_event_loop()
@@ -1182,27 +1076,18 @@ class FletSettingsApp:
                     
                     try:
                         success, message = loop.run_until_complete(test_client.test_connection())
-                        
-                        if success:
-                            # Try to get pipelines
-                            try:
-                                pipelines = test_client.get_available_pipelines()
-                                return True, message, pipelines
-                            except Exception:
-                                return True, message, []
-                        else:
-                            return False, message, []
+                        return success, message
                     finally:
                         loop.close()
                         
                 except Exception as ex:
-                    return False, str(ex), []
+                    return False, str(ex)
             
             # Run in thread
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(test_connection)
-                success, message, pipelines = future.result(timeout=30)
+                success, message = future.result(timeout=30)
             
             if success:
                 self.connection_status.value = f"✅ {message}"
@@ -1211,11 +1096,8 @@ class FletSettingsApp:
                 if self.animation_server:
                     self.animation_server.show_success("Connection successful", duration=3.0)
                 
-                # Update pipelines
-                if pipelines:
-                    self.pipelines_data = pipelines
-                    await self._update_pipeline_dropdown()
-                    
+                # Automatically refresh media players since connection is successful!
+                asyncio.create_task(self._refresh_media_players_async())
             else:
                 self.connection_status.value = f"❌ {message}"
                 self.connection_status.color = ft.Colors.RED_600
@@ -1232,45 +1114,6 @@ class FletSettingsApp:
             logger.error(f"Connection test failed: {ex}")
         
         self.page.update()
-    
-    async def _refresh_pipelines_async(self, e):
-        """Refresh pipelines list"""
-        # First test connection to get fresh pipeline data
-        await self._test_connection_async(e)
-    
-    async def _update_pipeline_dropdown(self):
-        """Update pipeline dropdown with fresh data"""
-        options = [ft.dropdown.Option(text="(default)", key="")]
-        
-        for pipeline in self.pipelines_data:
-            name = pipeline.get("name", "Unnamed")
-            pipeline_id = pipeline.get("id", "")
-            is_preferred = pipeline.get("is_preferred", False)
-            
-            star = " ⭐" if is_preferred else ""
-            display_name = f"{name}{star}"
-            
-            options.append(ft.dropdown.Option(text=display_name, key=pipeline_id))
-        
-        self.pipeline_dropdown.options = options
-        
-        # Set current value if it exists
-        current_pipeline_id = utils.get_env('HA_PIPELINE_ID', '')
-        if current_pipeline_id:
-            # Find matching option
-            for option in options:
-                if option.key == current_pipeline_id:
-                    self.pipeline_dropdown.value = current_pipeline_id
-                    break
-            else:
-                # Current pipeline not found, add it
-                self.pipeline_dropdown.options.append(
-                    ft.dropdown.Option(f"⚠️ Unknown: {current_pipeline_id}", current_pipeline_id)
-                )
-                self.pipeline_dropdown.value = current_pipeline_id
-        
-        self.page.update()
-        logger.info(f"Updated pipeline list: {len(self.pipelines_data)} available")
     
     async def _refresh_microphones_async(self):
         """Refresh microphone list"""
@@ -1517,9 +1360,7 @@ class FletSettingsApp:
                 return
             
             def get_media_players():
-                test_client = HomeAssistantClient()
-                test_client.host = host.value.strip()
-                test_client.token = token.value.strip()
+                test_client = HomeAssistantClient(host=host.value.strip(), token=token.value.strip())
                 
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -1663,9 +1504,7 @@ class FletSettingsApp:
         """Auto-load pipelines in background"""
         try:
             def load_pipelines():
-                test_client = HomeAssistantClient()
-                test_client.host = host
-                test_client.token = token
+                test_client = HomeAssistantClient(host=host, token=token)
                 
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -1694,7 +1533,7 @@ class FletSettingsApp:
     
     async def _download_models_async(self, e):
         """Download default openWakeWord models"""
-        logger.info("🔥 DOWNLOAD MODELS CLICKED!")
+        logger.info("DOWNLOAD MODELS CLICKED!")
         try:
             import openwakeword
         except ImportError:
@@ -1804,7 +1643,7 @@ class FletSettingsApp:
                 ft.Text(f"Selected models: {', '.join(selected_models)}", size=14),
                 ft.Text(f"Detection threshold: {self.wake_threshold_slider.value:.2f}", size=14),
                 ft.Container(height=10),
-                ft.Text("This is a simulation. For real testing, save settings and restart GLaSSIST.", 
+                ft.Text("This is a simulation. For real testing, save settings and restart WinVE.", 
                        color=ft.Colors.BLUE_600, size=12),
                 ft.Container(height=10),
                 ft.Text("🔴 Click 'Start Test' and say one of your wake words!", 
@@ -1844,7 +1683,7 @@ class FletSettingsApp:
             dialog.content = ft.Column([
                 ft.Text("✅ Test completed!", color=ft.Colors.GREEN_600, 
                        weight=ft.FontWeight.BOLD, size=16),
-                ft.Text("For real wake word testing, save your settings and restart GLaSSIST.", 
+                ft.Text("For real wake word testing, save your settings and restart WinVE.", 
                        size=14, color=ft.Colors.BLUE_600),
                 ft.Container(height=10),
                 ft.Text("💡 Tip: Adjust thresholds if you get too many false positives or missed detections.",
@@ -1858,15 +1697,13 @@ class FletSettingsApp:
     
     async def _save_settings_async(self, e):
         """Save all settings to .env file"""
-        logger.info("🔥 SAVE SETTINGS CLICKED!")
+        logger.info("SAVE SETTINGS CLICKED!")
         try:
-            # Validate required fields
-            if not self.host_field.value.strip():
-                await self._show_dialog("Validation Error", "Home Assistant server address is required!")
-                return
-                
-            if not self.token_field.value.strip():
-                await self._show_dialog("Validation Error", "Access token is required!")
+            # Validate optional HA host/token
+            host_val = self.host_field.value.strip() if self.host_field.value else ""
+            token_val = self.token_field.value.strip() if self.token_field.value else ""
+            if (host_val and not token_val) or (token_val and not host_val):
+                await self._show_dialog("Validation Error", "Both Home Assistant server address and access token are required if either is provided!")
                 return
             
             # Validate wake word settings if enabled
@@ -1910,10 +1747,9 @@ class FletSettingsApp:
             if selected_output_index is None:
                 selected_output_index = -1
             
-            # Get selected pipeline ID  
-            selected_pipeline_id = self.pipeline_dropdown.value
-            if selected_pipeline_id is None:
-                selected_pipeline_id = ""
+            # Get selected pipeline ID
+            # In ESPHome satellite mode, the pipeline is handled in HA, but we preserve any existing ID
+            selected_pipeline_id = self.current_settings.get('HA_PIPELINE_ID', '')
             
             # Debug - log what we're saving
             logger.info(f"Saving settings:")
@@ -1956,14 +1792,14 @@ class FletSettingsApp:
                 # Media player settings
                 'HA_MEDIA_PLAYER_ENTITIES': self.media_player_entities_field.value.strip(),
                 'HA_MEDIA_PLAYER_TARGET_VOLUME': str(round(self.target_volume_slider.value, 2)),
-
+ 
                 # Audio / conversation
                 'HA_TIMER_SOUND': self._copy_timer_sound(self.timer_sound_field.value.strip()),
                 'HA_CONTINUE_ON_QUESTION': 'true' if self.continue_on_question_switch.value else 'false',
-
+ 
                 # Connection mode
-                'CONNECTION_MODE': self.connection_mode_dropdown.value or 'websocket',
-                'DEVICE_NAME': self.device_name_field.value.strip() or 'GLaSSIST',
+                'CONNECTION_MODE': 'esphome',
+                'DEVICE_NAME': self.device_name_field.value.strip() or 'WinVE',
                 'ESPHOME_PORT': self.esphome_port_field.value.strip() or '6053',
             }
             
@@ -1972,8 +1808,8 @@ class FletSettingsApp:
             
             if result['success']:
                 await self._show_dialog("Settings Saved", 
-                    f"{result['message']}\n\nRestart GLaSSIST to apply changes.",
-                    on_close=lambda: self.page.window_close())
+                    f"{result['message']}\n\nRestart WinVE to apply changes.",
+                    on_close=lambda: self.page.window.close())
                 
                 if self.animation_server:
                     self.animation_server.show_success("Settings saved", duration=3.0)
@@ -1987,24 +1823,10 @@ class FletSettingsApp:
     def _save_env_file(self, settings):
         """Save settings to .env file"""
         try:
-            # Find .env file location
-            possible_paths = [
-                os.path.join(os.path.dirname(__file__), '.env'),
-                os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'),
-                '.env'
-            ]
-            
-            env_path = None
-            for path in possible_paths:
-                if os.path.exists(path):
-                    env_path = path
-                    break
-                    
-            if not env_path:
-                env_path = possible_paths[0]
+            env_path = utils.get_env_path()
             
             # Generate .env content
-            env_content = "# GLaSSIST Desktop Settings\n"
+            env_content = "# WinVE Desktop Settings\n"
             env_content += "# Generated by Flet-based settings dialog\n\n"
             
             env_content += "# === CONNECTION ===\n"
@@ -2103,7 +1925,7 @@ class FletSettingsApp:
             callback()
 
     def _copy_timer_sound(self, path: str) -> str:
-        """Copy timer sound file into GLaSSIST's sound folder. Returns new path."""
+        """Copy timer sound file into WinVE's sound folder. Returns new path."""
         if not path or not os.path.isfile(path):
             return path
         sound_dir = os.path.join(os.path.dirname(__file__), 'sound')
@@ -2124,7 +1946,7 @@ class FletSettingsApp:
         """Close the settings window (called by main app on shutdown)."""
         try:
             if hasattr(self, 'page') and self.page:
-                self.page.window_close()
+                self.page.window.close()
         except Exception:
             pass
         # Wait for the Flet thread/subprocess to actually exit

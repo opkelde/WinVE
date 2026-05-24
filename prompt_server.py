@@ -9,7 +9,7 @@ import utils
 logger = utils.setup_logger()
 
 class PromptHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for HA->GLaSSIST prompts."""
+    """HTTP request handler for HA->WinVE prompts."""
     
     def __init__(self, *args, conversation_manager=None, **kwargs):
         self.conversation_manager = conversation_manager
@@ -70,7 +70,7 @@ class PromptHandler(BaseHTTPRequestHandler):
             self.end_headers()
             response = {
                 "status": "ok", 
-                "service": "GLaSSIST Prompt Server",
+                "service": "WinVE Prompt Server",
                 "conversation_manager": self.conversation_manager is not None
             }
             self.wfile.write(json.dumps(response).encode())
