@@ -775,7 +775,7 @@ class SatelliteServer:
         else:
             _LOGGER.warning("Wake word detected but HA not connected — ignoring")
             if self._animation_server:
-                self._animation_server.show_error("Brak połączenia z Home Assistant", duration=3.0)
+                self._animation_server.show_error("Not connected to Home Assistant", duration=3.0)
 
     def start_conversation(self) -> None:
         """Trigger pipeline run from hotkey / tray menu."""
@@ -783,6 +783,8 @@ class SatelliteServer:
             self._protocol.start_conversation()
         else:
             _LOGGER.warning("Voice trigger but HA not connected")
+            if self._animation_server:
+                self._animation_server.show_error("Not connected to Home Assistant", duration=3.0)
 
     def stop_timer(self) -> None:
         """Stop looping timer sound."""
