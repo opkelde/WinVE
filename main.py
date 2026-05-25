@@ -210,7 +210,7 @@ class HAAssistApp:
     def _build_tray_menu(self):
         """Construct tray menu reflecting current state."""
         return pystray.Menu(
-            item('🎤 Activate voice (%s)' % utils.get_env("HA_HOTKEY", "ctrl+shift+h"),
+            item('🎤 Activate voice (%s)' % (utils.get_env("HA_HOTKEY", "ctrl+shift+h") or "ctrl+shift+h"),
                  self.trigger_voice_command),
             pystray.Menu.SEPARATOR,
             item(self._get_toggle_label(), self._toggle_wake_word_detection),
@@ -440,7 +440,7 @@ class HAAssistApp:
         try:
             import keyboard
             
-            hotkey = utils.get_env("HA_HOTKEY", "ctrl+shift+h")
+            hotkey = utils.get_env("HA_HOTKEY", "ctrl+shift+h") or "ctrl+shift+h"
             keyboard.add_hotkey(hotkey, self.on_voice_command_trigger)
             logger.info(f"Keyboard shortcut set: {hotkey}")
             
@@ -871,7 +871,7 @@ def main():
     important_settings = {
         'HA_HOST': utils.get_env('HA_HOST', 'MISSING'),
         'HA_PIPELINE_ID': utils.get_env('HA_PIPELINE_ID', '(default)'),
-        'HA_HOTKEY': utils.get_env('HA_HOTKEY', 'ctrl+shift+h'),
+        'HA_HOTKEY': utils.get_env('HA_HOTKEY', 'ctrl+shift+h') or 'ctrl+shift+h',
         'HA_VAD_MODE': utils.get_env('HA_VAD_MODE', '3'),
         'HA_SOUND_FEEDBACK': utils.get_env('HA_SOUND_FEEDBACK', 'false'),
         'HA_WAKE_WORD_ENABLED': utils.get_env('HA_WAKE_WORD_ENABLED', 'true'),

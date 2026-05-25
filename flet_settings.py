@@ -2027,7 +2027,7 @@ class FletSettingsApp:
                 'HA_HOST': self.host_field.value.strip(),
                 'HA_TOKEN': self.token_field.value.strip(),
                 'HA_PIPELINE_ID': selected_pipeline_id,
-                'HA_HOTKEY': self.hotkey_dropdown.value,
+                'HA_HOTKEY': self.hotkey_dropdown.value or 'ctrl+shift+h',
                 'HA_SILENCE_THRESHOLD_SEC': str(round(self.silence_slider.value, 1)),
                 'HA_VAD_MODE': str(int(self.vad_slider.value)),
                 'HA_MICROPHONE_INDEX': str(selected_mic_index),

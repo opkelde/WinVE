@@ -106,7 +106,7 @@ var
   HAToken: string;
 begin
   if CurStep = ssPostInstall then begin
-    EnvDir := ExpandConstant('{localappdata}\WinVE\_internal');
+    EnvDir := ExpandConstant('{app}');
     EnvPath := EnvDir + '\.env';
 
     if not DirExists(EnvDir) then
