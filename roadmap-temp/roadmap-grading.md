@@ -1,6 +1,6 @@
 # WinVE Prototyped Features Grading
 
-This document grades all 34 prototyped features in `roadmap-temp/` on their **Concept** (utility, feasibility, and alignment with WinVE's philosophy) and **Quality** (completeness, native Windows API utilization, and robustness of the script code).
+This document grades all 34 prototyped features and 1 conceptual feature in `roadmap-temp/` on their **Concept** (utility, feasibility, and alignment with WinVE's philosophy) and **Quality** (completeness, native Windows API utilization, and robustness of the script code).
 
 ---
 
@@ -55,13 +55,14 @@ This document grades all 34 prototyped features in `roadmap-temp/` on their **Co
 | 32 | **config_import_export.py** | A | A | **A** | Confirmed feature. Handles imports, environment changes, and backups safely. |
 | 33 | **fullscreen_text_suppression.py** | A+ | A+ | **A+** | Confirmed feature. Uses native `SHQueryUserNotificationState` to detect fullscreen games/apps cleanly with zero polling overhead. |
 | 34 | **voice_biometrics_identification.py** | B+ | A- | **B+** | Unconfirmed feature. Implements Mel-scale frequency spectrogram profiling and cosine similarity for speaker verification natively using NumPy. |
+| 35 | **Confirmed Feature Status (Concept)** | A | N/A | **A** | Confirmed feature concept. A unified settings status panel in Flet to monitor, toggle, and view active/inactive confirmed features. |
 
 ---
 
 ## Key Observations
 
 1. **Top Performers (Grade A/A+)**:
-   - `local_pc_commands.py`, `pc_status_reporting.py`, `universal_session_ducking.py`, `voice_spells_bypass.py`, `config_import_export.py`, and `fullscreen_text_suppression.py`.
+   - `local_pc_commands.py`, `pc_status_reporting.py`, `universal_session_ducking.py`, `voice_spells_bypass.py`, `config_import_export.py`, `fullscreen_text_suppression.py`, and the Confirmed Feature Status Concept.
    - These features rely on native Windows architectures (`ctypes.windll`, COM, or shell state queries) and add zero heavy external runtimes.
 2. **Lowest Performer (Grade C+)**:
    - `gesture_activation_support.py`.

@@ -18,6 +18,8 @@ This document outlines the development roadmap, possible improvement plans, core
   - Allow users to export their complete WinVE configuration (environment settings, custom script mappings, spells list) to a portable backup file, and import it back with integrity validation and automatic process environment updates.
 - **Suppress Screen Text with Fullscreen Applications**
   - Add a settings toggle to automatically hide listening HUD animations, overlays, and response texts when a DirectX game or other fullscreen application is actively running in the foreground to prevent visual interference.
+- **Confirmed Feature Status Dashboard**
+  - Add a unified Flet settings panel to monitor, toggle, and manage the live operational status and configurations of all confirmed WinVE features.
 
 ---
 
