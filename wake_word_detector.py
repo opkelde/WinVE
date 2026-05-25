@@ -109,42 +109,14 @@ class WakeWordDetector:
                 onnx_paths = [p for p in model_paths if p.endswith('.onnx')]
                 tflite_paths = [p for p in model_paths if p.endswith('.tflite')]
                 
-                # Platform-specific model preference
-                if platform.system() == "Linux":
-                    # Linux: prefer TFLite. Filter out ONNX paths, keep TFLite paths and default names (neither end in .onnx)
-                    filtered_paths = [p for p in model_paths if not p.endswith('.onnx')]
-                    if filtered_paths:
-                        try:
-                            import tflite_runtime
-                            model_kwargs['wakeword_models'] = filtered_paths
-                            logger.info(f"Loading TFLite and default models on Linux: {', '.join(self.selected_models)}")
-                        except ImportError:
-                            logger.warning("TFLite runtime not available, trying ONNX...")
-                            # Fallback: keep ONNX paths and default names (filter out TFLite paths)
-                            fallback_paths = [p for p in model_paths if not p.endswith('.tflite')]
-                            if fallback_paths:
-                                model_kwargs['wakeword_models'] = fallback_paths
-                                logger.info(f"Loading ONNX and default models as fallback: {', '.join(self.selected_models)}")
-                            else:
-                                logger.info("Falling back to default openWakeWord models")
-                    else:
-                        # Only ONNX paths selected
-                        filtered_onnx = [p for p in model_paths if not p.endswith('.tflite')]
-                        if filtered_onnx:
-                            model_kwargs['wakeword_models'] = filtered_onnx
-                            model_kwargs['inference_framework'] = 'onnx'
-                            logger.info(f"Loading ONNX models on Linux: {', '.join(self.selected_models)}")
-                        else:
-                            logger.info("Using default openWakeWord models")
+                # Windows/ONNX: Filter out TFLite paths, keep ONNX paths and default names (neither end in .tflite)
+                filtered_paths = [p for p in model_paths if not p.endswith('.tflite')]
+                if filtered_paths:
+                    model_kwargs['wakeword_models'] = filtered_paths
+                    model_kwargs['inference_framework'] = 'onnx'
+                    logger.info(f"Loading models: {', '.join(self.selected_models)}")
                 else:
-                    # Windows: prefer ONNX. Filter out TFLite paths, but keep ONNX paths and default names (neither end in .tflite)
-                    filtered_paths = [p for p in model_paths if not p.endswith('.tflite')]
-                    if filtered_paths:
-                        model_kwargs['wakeword_models'] = filtered_paths
-                        model_kwargs['inference_framework'] = 'onnx'
-                        logger.info(f"Loading models on Windows: {', '.join(self.selected_models)}")
-                    else:
-                        logger.info("Using default openWakeWord models")
+                    logger.info("Using default openWakeWord models")
             else:
                 logger.info("Using default openWakeWord models")
             
@@ -194,7 +166,7 @@ class WakeWordDetector:
             return False
     
     def _get_model_paths(self):
-        """Get full paths to selected model files with Linux preference."""
+        """Get full paths to selected model files."""
         paths = []
         # Also check CWD/models as fallback for frozen mode
         fallback_models_dir = os.path.join(os.getcwd(), 'models')
@@ -205,11 +177,8 @@ class WakeWordDetector:
         for model_name in self.selected_models:
             model_found = False
             
-            # On Linux, prefer .tflite first
-            if platform.system() == "Linux":
-                extensions = ['.tflite', '.onnx']
-            else:
-                extensions = ['.onnx', '.tflite']
+            # Prefer .onnx over .tflite
+            extensions = ['.onnx', '.tflite']
             
             for models_dir in search_dirs:
                 if model_found:
@@ -550,7 +519,7 @@ def list_available_models():
     
     models = []
     for filename in os.listdir(models_dir):
-        if filename.endswith(('.onnx', '.tflite')):
+        if filename.endswith('.onnx'):
             model_name = os.path.splitext(filename)[0]
             models.append(model_name)
     
@@ -601,7 +570,7 @@ def validate_wake_word_config():
         
         for model in selected_models:
             found = False
-            for ext in ['.onnx', '.tflite']:
+            for ext in ['.onnx']:
                 if f"{model}{ext}" in available_files:
                     found = True
                     break

@@ -38,9 +38,6 @@ UPDATE_TEMPLATE.md
 RELEASE_NOTES_*.md
 HA_FORUM_POST_*.md
 
-# External projects (reference only)
-linux-voice-assistant/
-
 # Codex / internal planning docs
 CODEX_*.md
 

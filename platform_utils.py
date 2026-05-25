@@ -14,30 +14,14 @@ def get_icon_path():
     """Get appropriate icon path for current platform."""
     base_path = Path(__file__).parent / 'img'
     
-    if platform.system() == "Windows":
-        ico_path = base_path / 'icon.ico'
-        if ico_path.exists():
-            return str(ico_path)
-    
-    # Linux/macOS prefer PNG
-    png_path = base_path / 'icon.png'
-    if png_path.exists():
-        return str(png_path)
-    
-    # Fallback to ICO if PNG doesn't exist
     ico_path = base_path / 'icon.ico'
     if ico_path.exists():
         return str(ico_path)
-    
     return None
 
 def hide_window_from_taskbar(window_title="WinVE"):
     """Hide window from taskbar - Windows-only implementation."""
-    if platform.system() == "Windows":
-        return _hide_from_taskbar_windows(window_title)
-    else:
-        logger.info("Taskbar hiding not implemented for this platform")
-        return False
+    return _hide_from_taskbar_windows(window_title)
 
 def _hide_from_taskbar_windows(window_title):
     """Windows-specific taskbar hiding and transparency configuration using ctypes."""

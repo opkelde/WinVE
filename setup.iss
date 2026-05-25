@@ -3,7 +3,7 @@
 
 #define MyAppName "WinVE"
 #define MyAppVersion "3.0.0"
-#define MyAppPublisher "Patryk Smoliński"
+#define MyAppPublisher "opkelde"
 #define MyAppURL "https://github.com/opkelde/WinVE"
 #define MyAppExeName "WinVE.exe"
 

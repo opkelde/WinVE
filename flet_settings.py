@@ -8,7 +8,6 @@ import os
 import threading
 import webbrowser
 import subprocess
-import platform as platform_module
 import utils
 from client import HomeAssistantClient
 from audio import AudioManager
@@ -1798,13 +1797,8 @@ class FletSettingsApp:
             if not os.path.exists(models_dir):
                 os.makedirs(models_dir)
             
-            # Cross-platform folder opening
-            if platform_module.system() == "Windows":
-                os.startfile(models_dir)
-            elif platform_module.system() == "Darwin":  # macOS
-                subprocess.run(["open", models_dir])
-            else:  # Linux
-                subprocess.run(["xdg-open", models_dir])
+            # Open folder on Windows
+            os.startfile(models_dir)
                 
             logger.info(f"Opened models folder: {models_dir}")
             

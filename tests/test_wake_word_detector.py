@@ -121,7 +121,7 @@ class TestWakeWordDetector:
     def test_get_model_paths_success(self, mock_exists):
         """Test getting model paths successfully."""
         def side_effect(path):
-            if path.endswith(('alexa.onnx', 'jarvis.tflite', 'models')):
+            if path.endswith(('alexa.onnx', 'jarvis.onnx', 'models')):
                 return True
             return False
         mock_exists.side_effect = side_effect
@@ -133,7 +133,7 @@ class TestWakeWordDetector:
         
         assert len(paths) == 2
         assert any('alexa.onnx' in path for path in paths)
-        assert any('jarvis.tflite' in path for path in paths)
+        assert any('jarvis.onnx' in path for path in paths)
     
     @patch('os.path.exists')
     def test_get_model_paths_missing_models(self, mock_exists):
@@ -347,8 +347,8 @@ class TestWakeWordDetector:
         """Test getting available models."""
         mock_exists.return_value = True
         mock_listdir.return_value = [
-            'alexa.onnx', 'alexa.tflite', 
-            'jarvis.onnx', 'jarvis.tflite',
+            'alexa.onnx', 
+            'jarvis.onnx',
             'hal.onnx', 'other.txt'
         ]
         
@@ -445,7 +445,7 @@ def test_validate_wake_word_config():
         'HA_WAKE_WORD_THRESHOLD': '0.5'
     }):
         with patch('os.path.exists', return_value=True), \
-             patch('os.listdir', return_value=['alexa.onnx', 'jarvis.tflite']):
+             patch('os.listdir', return_value=['alexa.onnx', 'jarvis.onnx']):
             
             issues = wake_word_detector.validate_wake_word_config()
             
