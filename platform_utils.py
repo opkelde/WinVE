@@ -117,3 +117,79 @@ def check_wake_word_noise_suppression():
     """Check if noise suppression is available for wake word detection."""
     # Disabled on Windows due to compatibility issues
     return False
+
+class FullscreenAppSuppressor:
+    """Detects active fullscreen applications and manages HUD visibility state."""
+    
+    def __init__(self):
+        try:
+            import ctypes
+            self.user32 = ctypes.windll.user32
+            self.shell32 = ctypes.windll.shell32
+        except Exception:
+            self.user32 = None
+            self.shell32 = None
+        
+        # Query User Notification State constants
+        self.QUNS_NOT_PRESENT = 1
+        self.QUNS_BUSY = 2
+        self.QUNS_RUNNING_D3D_FULL_SCREEN = 3
+        self.QUNS_PRESENTATION_MODE = 4
+        self.QUNS_ACCEPTS_NOTIFICATIONS = 5
+        self.QUNS_QUIET_TIME = 6
+        self.QUNS_APP = 7
+
+    def is_fullscreen_app_active(self) -> bool:
+        """
+        Determines if a fullscreen application is active.
+        Combines shell notification state and active window dimension checks.
+        """
+        if not self.user32 or not self.shell32:
+            return False
+
+        # Method 1: Query Shell User Notification State
+        # Highly reliable for detecting Direct3D fullscreen games, PowerPoint, etc.
+        try:
+            import ctypes
+            state = ctypes.c_int(0)
+            hr = self.shell32.SHQueryUserNotificationState(ctypes.byref(state))
+            if hr == 0:  # S_OK
+                if state.value in (self.QUNS_RUNNING_D3D_FULL_SCREEN, self.QUNS_BUSY, self.QUNS_PRESENTATION_MODE):
+                    logger.debug(f"Fullscreen suppression: SHQueryUserNotificationState is busy ({state.value})")
+                    return True
+        except Exception as e:
+            logger.debug(f"SHQueryUserNotificationState check failed: {e}")
+
+        # Method 2: Active Window size check (Fallback for non-D3D borderless windows)
+        try:
+            import ctypes
+            from ctypes import wintypes
+            hwnd = self.user32.GetForegroundWindow()
+            if hwnd:
+                # Skip checking Desktop or Taskbar
+                desktop_hwnd = self.user32.GetDesktopWindow()
+                shell_hwnd = self.user32.GetShellWindow()
+                if hwnd in (desktop_hwnd, shell_hwnd):
+                    return False
+
+                rect = wintypes.RECT()
+                if self.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    width = rect.right - rect.left
+                    height = rect.bottom - rect.top
+                    
+                    # Get current monitor size
+                    screen_width = self.user32.GetSystemMetrics(0) # SM_CXSCREEN
+                    screen_height = self.user32.GetSystemMetrics(1) # SM_CYSCREEN
+                    
+                    # If active window dimensions match or exceed the primary screen bounds, it is fullscreen
+                    if width >= screen_width and height >= screen_height:
+                        GWL_STYLE = -16
+                        style = self.user32.GetWindowLongW(hwnd, GWL_STYLE)
+                        WS_CAPTION = 0x00C00000
+                        if not (style & WS_CAPTION):
+                            logger.debug("Fullscreen suppression: Foreground window is borderless fullscreen")
+                            return True
+        except Exception as e:
+            logger.debug(f"Active window size check failed: {e}")
+                        
+        return False

@@ -9,6 +9,7 @@ import ctypes
 import os
 import logging
 from dotenv import load_dotenv
+from platform_utils import FullscreenAppSuppressor
 
 logger = logging.getLogger('haassist')
 
@@ -35,6 +36,7 @@ def get_env_bool(key, default=False):
 
 def run_overlay(port=8765):
     """Launch the Flet overlay window. Blocks until closed."""
+    suppressor = FullscreenAppSuppressor()
 
     # Query true screen dimensions on Windows thread-safely
     try:
@@ -143,6 +145,15 @@ def run_overlay(port=8765):
                 page.update()
                 return
 
+            # Fullscreen application suppression check
+            if get_env_bool('HA_SUPPRESS_FULLSCREEN', False) and suppressor.is_fullscreen_app_active():
+                logger.info("🚫 Fullscreen suppression active: hiding overlay.")
+                response_card.visible = False
+                state['active'] = False
+                page.window.visible = False
+                page.update()
+                return
+
             state['active'] = True
             page.window.visible = True
 
@@ -168,6 +179,15 @@ def run_overlay(port=8765):
             page.update()
 
         def handle_response_text(text):
+            # Fullscreen application suppression check
+            if get_env_bool('HA_SUPPRESS_FULLSCREEN', False) and suppressor.is_fullscreen_app_active():
+                response_card.visible = False
+                try:
+                    page.update()
+                except Exception:
+                    pass
+                return
+
             if text:
                 response_text_ctrl.value = text
                 response_card.visible = True

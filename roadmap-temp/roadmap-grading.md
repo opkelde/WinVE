@@ -1,6 +1,6 @@
 # WinVE Prototyped Features Grading
 
-This document grades all 34 prototyped features in `roadmap-temp/` on their **Concept** (utility, feasibility, and alignment with WinVE's philosophy) and **Quality** (completeness, native Windows API utilization, and robustness of the script code).
+This document grades all prototyped features in `roadmap-temp/` on their **Concept** (utility, feasibility, and alignment with WinVE's philosophy) and **Quality** (completeness, native Windows API utilization, and robustness of the script code).
 
 ---
 
@@ -55,16 +55,17 @@ This document grades all 34 prototyped features in `roadmap-temp/` on their **Co
 | 32 | **config_import_export.py** | True | A | A | **A** | Confirmed feature. Handles imports, environment changes, and backups safely. |
 | 33 | **fullscreen_text_suppression.py** | True | A+ | A+ | **A+** | Confirmed feature. Uses native `SHQueryUserNotificationState` to detect fullscreen games/apps cleanly with zero polling overhead. |
 | 34 | **voice_biometrics_identification.py** | False | B+ | A- | **B+** | Unconfirmed feature. Implements Mel-scale frequency spectrogram profiling and cosine similarity for speaker verification natively using NumPy. |
+| 35 | **one_click_updater.py** | True | A+ | A | **A+** | Confirmed feature. Queries the GitHub Releases API for updates, downloads the setup binary, and installs it in a single click. |
 
 ---
 
 ## Key Observations
 
 1. **Top Performers (Grade A/A+)**:
-   - `local_pc_commands.py`, `pc_status_reporting.py`, `universal_session_ducking.py`, `voice_spells_bypass.py`, `config_import_export.py`, and `fullscreen_text_suppression.py`.
+   - `local_pc_commands.py`, `pc_status_reporting.py`, `universal_session_ducking.py`, `voice_spells_bypass.py`, `config_import_export.py`, `fullscreen_text_suppression.py`, and `one_click_updater.py`.
    - These features rely on native Windows architectures (`ctypes.windll`, COM, or shell state queries) and add zero heavy external runtimes.
 2. **Lowest Performer (Grade C+)**:
    - `gesture_activation_support.py`.
    - While the concept is interesting, integrating real-time camera feeds via MediaPipe/OpenCV violates WinVE's core guideline of maintaining a *minimal background CPU footprint*. It is recommended to leave this as an optional extension.
 3. **General Quality**:
-   - All 34 scripts are written as complete, executable Python prototypes with test harnesses, rather than generic code stubs.
+   - Active scripts are written as complete, executable Python prototypes with test harnesses, rather than generic code stubs.

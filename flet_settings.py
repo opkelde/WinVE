@@ -120,6 +120,7 @@ class FletSettingsApp:
             'HA_OUTPUT_SAMPLE_RATE': utils.get_env('HA_OUTPUT_SAMPLE_RATE', '-1'),
             'DEBUG': utils.get_env('DEBUG', 'false'),
             'HA_ANIMATIONS_ENABLED': utils.get_env('HA_ANIMATIONS_ENABLED', 'true'),
+            'HA_SUPPRESS_FULLSCREEN': utils.get_env('HA_SUPPRESS_FULLSCREEN', 'false'),
             'HA_RESPONSE_TEXT_ENABLED': utils.get_env('HA_RESPONSE_TEXT_ENABLED', 'true'),
             'HA_SHOW_LISTENING_INDICATOR': utils.get_env('HA_SHOW_LISTENING_INDICATOR', 'true'),
             'HA_SAMPLE_RATE': utils.get_env('HA_SAMPLE_RATE', '16000'),
@@ -265,7 +266,11 @@ class FletSettingsApp:
             )
         ], expand=True)
         
+        self.config_import_picker = ft.FilePicker(on_result=self._on_config_import_result)
+        self.config_export_picker = ft.FilePicker(on_result=self._on_config_export_result)
         self.page.overlay.append(self.timer_sound_picker)
+        self.page.overlay.append(self.config_import_picker)
+        self.page.overlay.append(self.config_export_picker)
         self.page.add(main_container)
         
         # Auto-refresh wake word models after all UI is created
@@ -921,6 +926,12 @@ class FletSettingsApp:
             active_color=ft.Colors.BLUE_600
         )
         
+        self.suppress_fullscreen_switch = ft.Switch(
+            label="Suppress overlay in fullscreen applications",
+            value=current_settings.get('HA_SUPPRESS_FULLSCREEN', 'false') == 'true',
+            active_color=ft.Colors.BLUE_600
+        )
+        
         # Debug mode
         self.debug_switch = ft.Switch(
             label="Debug mode (detailed logs)",
@@ -990,6 +1001,10 @@ class FletSettingsApp:
                             ft.Container(height=10),
                             self.listening_indicator_switch,
                             ft.Text("Display 'Listening...' when assistant is activated.",
+                                   color=ft.Colors.GREY_600, size=12),
+                            ft.Container(height=10),
+                            self.suppress_fullscreen_switch,
+                            ft.Text("Automatically hide HUD animations and response texts during fullscreen apps/games.",
                                    color=ft.Colors.GREY_600, size=12)
                         ]),
                         padding=20
@@ -1041,6 +1056,39 @@ class FletSettingsApp:
                             self.animation_port_field,
                             ft.Text("WebSocket port for browser-based animations. Change if port conflicts occur.",
                                    color=ft.Colors.GREY_600, size=12)
+                        ]),
+                        padding=20
+                    ),
+                    elevation=2
+                ),
+                
+                # Configuration Backup card
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("💾 Configuration Backup", size=18, weight=ft.FontWeight.BOLD),
+                            ft.Text("Backup your WinVE configuration settings or restore them from a JSON profile.",
+                                   color=ft.Colors.GREY_600, size=12),
+                            ft.Container(height=10),
+                            ft.Row([
+                                ft.ElevatedButton(
+                                    "Export Backup...",
+                                    icon=ft.Icons.DOWNLOAD,
+                                    on_click=lambda _: self.config_export_picker.save_file(
+                                        dialog_title="Export WinVE Backup",
+                                        file_name="winve_backup.json",
+                                        allowed_extensions=["json"]
+                                    )
+                                ),
+                                ft.ElevatedButton(
+                                    "Import Backup...",
+                                    icon=ft.Icons.UPLOAD,
+                                    on_click=lambda _: self.config_import_picker.pick_files(
+                                        dialog_title="Import WinVE Backup",
+                                        allowed_extensions=["json"]
+                                    )
+                                )
+                            ], spacing=20)
                         ]),
                         padding=20
                     ),
@@ -1967,6 +2015,7 @@ class FletSettingsApp:
                 'HA_ANIMATIONS_ENABLED': 'true' if self.animations_switch.value else 'false',
                 'HA_RESPONSE_TEXT_ENABLED': 'true' if self.response_text_switch.value else 'false',
                 'HA_SHOW_LISTENING_INDICATOR': 'true' if self.listening_indicator_switch.value else 'false',
+                'HA_SUPPRESS_FULLSCREEN': 'true' if self.suppress_fullscreen_switch.value else 'false',
                 'HA_SAMPLE_RATE': self.sample_rate_dropdown.value,
                 'HA_OUTPUT_SAMPLE_RATE': self.output_sample_rate_dropdown.value,
                 'HA_FRAME_DURATION_MS': self.frame_duration_dropdown.value,
@@ -2080,6 +2129,7 @@ class FletSettingsApp:
             env_content += f"HA_ANIMATIONS_ENABLED={settings['HA_ANIMATIONS_ENABLED']}\n"
             env_content += f"HA_RESPONSE_TEXT_ENABLED={settings['HA_RESPONSE_TEXT_ENABLED']}\n"
             env_content += f"HA_SHOW_LISTENING_INDICATOR={settings['HA_SHOW_LISTENING_INDICATOR']}\n"
+            env_content += f"HA_SUPPRESS_FULLSCREEN={settings['HA_SUPPRESS_FULLSCREEN']}\n"
 
             env_content += "\n# === NETWORK ===\n"
             env_content += f"ANIMATION_PORT={settings['ANIMATION_PORT']}\n"
@@ -2123,7 +2173,137 @@ class FletSettingsApp:
                 'success': False, 
                 'message': f'Save error: {str(e)}'
             }
-    
+
+    async def _on_config_export_result(self, e: ft.FilePickerResultEvent):
+        """Handle config export file dialog result"""
+        if e.path:
+            try:
+                from config_import_export import ConfigImportExportManager
+                manager = ConfigImportExportManager()
+                success, msg = manager.export_config(e.path)
+                if success:
+                    await self._show_dialog("Export Success", f"Configuration exported successfully!\n\n{msg}")
+                else:
+                    await self._show_dialog("Export Failed", f"Failed to export configuration:\n\n{msg}")
+            except Exception as ex:
+                logger.error(f"Export error: {ex}")
+                await self._show_dialog("Export Error", f"Error during export: {str(ex)}")
+
+    async def _on_config_import_result(self, e: ft.FilePickerResultEvent):
+        """Handle config import file dialog result"""
+        if e.files and e.files[0].path:
+            try:
+                from config_import_export import ConfigImportExportManager
+                manager = ConfigImportExportManager()
+                
+                # Show loading dialog
+                progress_dialog = ft.AlertDialog(
+                    title=ft.Text("Importing Profile"),
+                    content=ft.Column([
+                        ft.Text("Validating and applying configuration backup..."),
+                        ft.ProgressRing()
+                    ], height=80, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    modal=True
+                )
+                self.page.dialog = progress_dialog
+                progress_dialog.open = True
+                self.page.update()
+                
+                success, msg = manager.import_config(e.files[0].path)
+                
+                progress_dialog.open = False
+                self.page.update()
+                
+                if success:
+                    # Update settings in active Flet session immediately
+                    self._reload_settings_in_ui()
+                    await self._show_dialog("Import Success", 
+                        "Configuration imported successfully!\n\nGUI fields have been reloaded. Click 'Save Settings' to confirm and restart any active wake word models.")
+                else:
+                    await self._show_dialog("Import Failed", f"Failed to import configuration:\n\n{msg}")
+            except Exception as ex:
+                logger.error(f"Import error: {ex}")
+                await self._show_dialog("Import Error", f"Error during import: {str(ex)}")
+
+    def _reload_settings_in_ui(self):
+        """Reload environment settings and update all input controls in-place."""
+        try:
+            logger.info("Reloading settings in UI...")
+            new_settings = self._load_current_settings()
+            self.current_settings = new_settings
+            
+            # Update connection fields
+            self.host_field.value = new_settings['HA_HOST']
+            self.token_field.value = new_settings['HA_TOKEN']
+            
+            # Update hotkey dropdown
+            self.hotkey_dropdown.value = new_settings['HA_HOTKEY']
+            
+            # Update sliders
+            self.silence_slider.value = float(new_settings['HA_SILENCE_THRESHOLD_SEC'])
+            self.silence_value_text.value = f"Current: {new_settings['HA_SILENCE_THRESHOLD_SEC']}s"
+            
+            self.vad_slider.value = int(new_settings['HA_VAD_MODE'])
+            self.vad_value_text.value = f"Current: {new_settings['HA_VAD_MODE']}"
+            
+            self.wake_threshold_slider.value = float(new_settings['HA_WAKE_WORD_THRESHOLD'])
+            self.wake_threshold_value_text.value = f"Current: {new_settings['HA_WAKE_WORD_THRESHOLD']:.2f}"
+            
+            self.vad_threshold_slider.value = float(new_settings['HA_WAKE_WORD_VAD_THRESHOLD'])
+            self.vad_threshold_value_text.value = f"Current: {new_settings['HA_WAKE_WORD_VAD_THRESHOLD']:.2f}"
+            
+            self.target_volume_slider.value = float(new_settings['HA_MEDIA_PLAYER_TARGET_VOLUME'])
+            self.target_volume_value_text.value = f"Current: {int(new_settings['HA_MEDIA_PLAYER_TARGET_VOLUME'] * 100)}%"
+            
+            # Update dropdowns
+            self.microphone_dropdown.value = int(new_settings['HA_MICROPHONE_INDEX'])
+            self.output_device_dropdown.value = int(new_settings['HA_OUTPUT_DEVICE_INDEX'])
+            self.sample_rate_dropdown.value = new_settings['HA_SAMPLE_RATE']
+            self.output_sample_rate_dropdown.value = new_settings['HA_OUTPUT_SAMPLE_RATE']
+            self.frame_duration_dropdown.value = new_settings['HA_FRAME_DURATION_MS']
+            self.animation_port_field.value = new_settings['ANIMATION_PORT']
+            
+            # Update switches
+            self.sound_feedback_switch.value = new_settings['HA_SOUND_FEEDBACK'] == 'true'
+            self.debug_switch.value = new_settings['DEBUG'] == 'true'
+            self.animations_switch.value = new_settings['HA_ANIMATIONS_ENABLED'] == 'true'
+            self.response_text_switch.value = new_settings['HA_RESPONSE_TEXT_ENABLED'] == 'true'
+            self.listening_indicator_switch.value = new_settings['HA_SHOW_LISTENING_INDICATOR'] == 'true'
+            self.suppress_fullscreen_switch.value = new_settings['HA_SUPPRESS_FULLSCREEN'] == 'true'
+            self.wake_word_enabled.value = new_settings['HA_WAKE_WORD_ENABLED'] == 'true'
+            self.noise_suppression_switch.value = new_settings['HA_WAKE_WORD_NOISE_SUPPRESSION'] == 'true'
+            self.continue_on_question_switch.value = new_settings['HA_CONTINUE_ON_QUESTION'] == 'true'
+            
+            # Update text fields
+            self.media_player_entities_field.value = new_settings['HA_MEDIA_PLAYER_ENTITIES']
+            self.timer_sound_field.value = new_settings['HA_TIMER_SOUND']
+            self.device_name_field.value = new_settings['DEVICE_NAME']
+            self.esphome_port_field.value = new_settings['ESPHOME_PORT']
+            
+            # Re-initialize models checkboxes/selections based on new list
+            models_list = [m.strip() for m in new_settings['HA_WAKE_WORD_MODELS'].split(',') if m.strip()]
+            self.initial_wake_word_models = models_list.copy()
+            # Clear selected models checkboxes UI and rebuild
+            self.selected_models_column.controls.clear()
+            for model in models_list:
+                model_row = ft.Row([
+                    ft.Icon(ft.Icons.LABEL, size=16, color=ft.Colors.BLUE_600),
+                    ft.Text(model, size=14, weight=ft.FontWeight.W_500),
+                    ft.IconButton(
+                        ft.Icons.DELETE_OUTLINE,
+                        icon_color=ft.Colors.RED_400,
+                        icon_size=18,
+                        tooltip="Remove model",
+                        on_click=lambda e, m=model: self._remove_model_by_name(m)
+                    )
+                ])
+                self.selected_models_column.controls.append(ft.Container(content=model_row, padding=2))
+                
+            self.page.update()
+            logger.info("UI successfully reloaded with imported settings.")
+        except Exception as ex:
+            logger.error(f"Reload settings UI error: {ex}")
+
     async def _show_dialog(self, title, message, on_close=None):
         """Show dialog with message"""
         dialog = ft.AlertDialog(

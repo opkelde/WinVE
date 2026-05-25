@@ -2,13 +2,12 @@
 
 WinVE is a lightweight, high-performance Windows desktop voice satellite endpoint for Home Assistant. It runs as a native ESPHome voice satellite, allowing you to use your PC's microphone and speakers as a native voice assistant endpoint with full support for timers, follow-up conversation modes, and media player ducking.
 
-Featuring premium modern UI, visual text feedback, optional activation/deactivation sounds, and customizable timer chime. WinVE is designed to be completely unobtrusive, showing absolutely no screen artifacts when idle, and appearing as a stunning rotating gradient border only when active.
+Featuring premium modern UI, visual text feedback, optional activation/deactivation sounds, and customizable timer chime. WinVE is designed to be completely unobtrusive, showing absolutely no screen artifacts when idle, and appearing as a modern text overlay at the bottom center of your screen when active.
 
 ##  Key Features
 
 - **Native ESPHome Satellite Protocol** — Connects directly to Home Assistant as an ESPHome voice satellite with auto-discovery via mDNS.
 - **Modern Text Bubble Overlay** — Assist shows up in the bottom center of your screen in a modern text bubble. It shows you a listening indicator, alongside the text response.
-- **Audio-Reactive Border** — The thickness and blur intensity of the glowing border scale dynamically in real time based on your voice volume.
 - **Wake Word Detection** — Built-in openWakeWord support with pre-trained models (Computer by default) running locally on your CPU.
 - **WebRTC VAD** — High-quality voice activity detection to start/stop listening accurately.
 - **Flet-Based Settings UI** — A modern settings window to configure audio devices, wake words, thresholds, and optional Home Assistant integrations. Includes convenient in-window control buttons for pausing, resuming, getting the status of, or restarting local wake word detection, with automatic reload when saving modified models.

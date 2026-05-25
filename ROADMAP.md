@@ -18,18 +18,19 @@ This document outlines the development roadmap, possible improvement plans, core
   - Allow users to export their complete WinVE configuration (environment settings, custom script mappings, spells list) to a portable backup file, and import it back with integrity validation and automatic process environment updates.
 - **Suppress Screen Text with Fullscreen Applications**
   - Add a settings toggle to automatically hide listening HUD animations, overlays, and response texts when a DirectX game or other fullscreen application is actively running in the foreground to prevent visual interference.
-
+- **One-Click Update Manager**
+  - Query the GitHub Releases API (from https://github.com/opkelde/WinVE/releases) for the latest version tag, perform a one-click background download of the compiled setup asset, and launch the installer semi-silently to upgrade the running application.
 
 ---
 
 ## Possible Improvement Plans
 
-### Glassmorphic HUD & Interactive Smart Widgets (UI/UX & Aesthetics)
-- **Real-time Transcript Overlay**: Render streaming STT transcriptions and responses in a beautiful, glassmorphic HUD directly on screen.
+### HUD Customization & Interactive Smart Widgets (UI/UX & Aesthetics)
+- **Real-time Transcript Overlay**: Render streaming STT transcriptions and responses in a clean text overlay directly on screen.
 - **Quick-Action Control Cards**: Display temporary floating cards with sliders/toggles (e.g., brightness or thermostat adjustments) based on intent recognition for immediate manual overrides.
-- **Theme Customization Engine**: Settings GUI controls to change overlay themes (Siri Conic, Google Dots, Retro Wave), adjust positioning (HUD, top right, center), and configure background blur opacity.
-- **LED Light Ring Simulator**: Render smart-speaker style circular LED animations (spinning, breathing, pulsing) directly on the screen HUD to represent the listener's active state.
-- **Transparent Keyboard Chat Overlay**: A transparent text-based input HUD bar that allows typing commands using keyboard hotkeys when voice input is not preferred.
+- **Theme Customization Engine**: Settings GUI controls to change overlay themes, adjust positioning (bottom center, top right, etc.), and customize font sizing/colors.
+- **LED Ring Simulator**: Render circular LED animations (spinning, breathing, pulsing) directly on the screen to represent the listener's active state.
+- **Transparent Keyboard Chat Overlay**: A transparent text-based input bar that allows typing commands using keyboard hotkeys when voice input is not preferred.
 - **Smart Home Floating Widget**: A compact home automation dashboard card overlay showing state indicators and quick toggles.
 
 ### Windows System Integration & Audio Ducking Engine (Core System & Performance)

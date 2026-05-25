@@ -45,9 +45,9 @@ WinVE is a desktop voice assistant for Home Assistant with the following key arc
 - **main.py** - Application entry point with `HAAssistApp` class, handles GUI lifecycle, tray integration, and component orchestration
 - **client.py** - `HomeAssistantClient` handles WebSocket communication with Home Assistant, pipeline management, and audio streaming
 - **audio.py** - `AudioManager` manages microphone input, audio processing, and integrates with VAD for speech detection
-- **animation_server.py** - WebSocket server that serves visual animations to the Three.js frontend via browser integration
-- **dummy_animation_server.py** - Fallback dummy server used when animations are disabled to run without launching a WebSocket server
-- **flet_overlay.py** - Transparent, fullscreen overlay window utilizing native Flutter rendering for Siri-style activation animations on Windows
+- **animation_server.py** - WebSocket server that serves state updates and response text to the Flet overlay
+- **dummy_animation_server.py** - Fallback dummy server used when animations/overlays are disabled
+- **flet_overlay.py** - Transparent, fullscreen overlay window utilizing native Flet rendering for visual feedback on Windows
 - **wake_word_detector.py** - Handles wake word detection using openWakeWord models with ONNX runtime on Windows
 
 ### Supporting Modules
@@ -58,8 +58,7 @@ WinVE is a desktop voice assistant for Home Assistant with the following key arc
 - **platform_utils.py** - Platform-specific utility functions for Windows (ctypes-based taskbar hiding, DWM glass transparency, explorer startfile)
 - **flet_settings.py** - Settings GUI for in-process or standalone configuration management
 
-### Frontend Integration
-- **frontend/index.html** - Siri-style CSS conic-gradient border overlay visual interface with FFT audio analysis
+### Asset Integration
 - **sound/** - Audio feedback files (`activation.wav`, `deactivation.wav`, `timer_finished.wav`)
 - **models/** - OpenWakeWord `.onnx` model files for local wake word detection
 
@@ -83,10 +82,9 @@ WinVE is a desktop voice assistant for Home Assistant with the following key arc
 - **Configuration**: Set via the `HA_WAKE_WORD_MODELS` environment variable (comma-separated).
 - **Custom Models**: Can be trained using Google Colab notebooks and must be converted to `.onnx` format.
 
-### Animation System
-- Animations can be disabled via `HA_ANIMATIONS_ENABLED=false` to use DummyAnimationServer
+### Animation/Overlay System
+- Animations/overlays can be disabled via `HA_ANIMATIONS_ENABLED=false` to use DummyAnimationServer
 - WebSocket communication on port 8765 (configurable via `ANIMATION_PORT`)
-- Real-time audio visualization using FFT analysis in the frontend overlay
 
 ### Audio Configuration
 - WebRTC VAD with configurable sensitivity (HA_VAD_MODE: 0-3)
