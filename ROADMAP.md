@@ -7,7 +7,11 @@ This document outlines the development roadmap, possible improvement plans, core
 ## Roadmap
 
 ### Confirmed Features
-There are no confirmed features scheduled at this time.
+- **Local PC Voice Commands (Offline Mode)**
+  - Enable local automation controls (e.g., *"lock computer"*, *"open Notepad"*, *"take screenshot"*) that execute locally via shell commands.
+  - Support a separate offline mode with its own dedicated wake word and keyboard shortcut/keybind, allowing seamless toggling between local PC control and Home Assistant control.
+- **Custom Script Triggers**
+  - Enable mapping of voice commands to custom paths or local batch/python scripts in the settings window.
 
 ---
 
@@ -24,9 +28,7 @@ There are no confirmed features scheduled at this time.
 - **Smart Noise Auto-Calibration**: Ambient noise check on startup to dynamically calibrate silence VAD limits and reduce false-positive wake word events.
 
 ### Local Offline PC Control & Satellite Arbitration (Connectivity & Local Automation)
-- **Local PC Voice Commands**: Enable local automation controls (e.g., *"lock computer"*, *"open Notepad"*, *"take screenshot"*) that execute locally via shell commands when HA is unreachable.
 - **Multi-Room Satellite Arbitration**: Coordinate with other network satellites via UDP broadcasts to ensure only the closest satellite (highest VAD score) answers a wake word.
-- **Custom Script Triggers**: Enable mapping of voice commands to custom paths or local batch/python scripts in the settings window.
 
 ---
 
