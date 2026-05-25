@@ -76,7 +76,11 @@ def setup_logger():
     debug_enabled = get_env_bool('DEBUG', False)
     if debug_enabled:
         try:
-            log_dir = os.path.join(os.path.dirname(__file__), 'logs')
+            import sys
+            if getattr(sys, 'frozen', False):
+                log_dir = os.path.join(os.path.dirname(sys.executable), 'logs')
+            else:
+                log_dir = os.path.join(os.path.dirname(__file__), 'logs')
             os.makedirs(log_dir, exist_ok=True)
             
             log_file = os.path.join(log_dir, f'winve_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')

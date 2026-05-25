@@ -440,13 +440,17 @@ class HAAssistApp:
         try:
             import keyboard
             
-            hotkey = utils.get_env("HA_HOTKEY", "ctrl+shift+h") or "ctrl+shift+h"
-            keyboard.add_hotkey(hotkey, self.on_voice_command_trigger)
-            logger.info(f"Keyboard shortcut set: {hotkey}")
-            
-            # Add escape key to hide interface quickly
+            # Add escape key to hide interface quickly (always active for UI responsiveness)
             keyboard.add_hotkey("escape", self.hide_interface)
             logger.info("ESC key set to hide interface")
+            
+            hotkey = utils.get_env("HA_HOTKEY", "ctrl+shift+h") or "ctrl+shift+h"
+            if hotkey.lower() == "disabled":
+                logger.info("Hotkey activation is disabled in configuration")
+                return True
+                
+            keyboard.add_hotkey(hotkey, self.on_voice_command_trigger)
+            logger.info(f"Keyboard shortcut set: {hotkey}")
             
             return True
             
@@ -456,6 +460,18 @@ class HAAssistApp:
         except Exception as e:
             logger.error(f"Error setting up keyboard shortcut: {e}")
             return False
+            
+    def reload_hotkey(self):
+        """Reload keyboard shortcuts after settings changes."""
+        try:
+            import keyboard
+            keyboard.clear_all_hotkeys()
+            logger.info("Cleared all hotkeys for reload")
+            self.setup_hotkey()
+            # Update the tray menu item title with the new hotkey
+            self._refresh_tray_menu()
+        except Exception as e:
+            logger.error(f"Error reloading hotkeys: {e}")
     
     def hide_interface(self):
         """Hide interface immediately via ESC key."""

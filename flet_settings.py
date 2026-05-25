@@ -336,6 +336,7 @@ class FletSettingsApp:
                 ft.dropdown.Option("ctrl+alt+h"),
                 ft.dropdown.Option("alt+space"),
                 ft.dropdown.Option("ctrl+shift+space"),
+                ft.dropdown.Option("disabled"),
             ],
             expand=True
         )
@@ -2078,7 +2079,7 @@ class FletSettingsApp:
                 
                 # Check what changed relative to self.current_settings
                 restart_required_keys = [
-                    'HA_HOST', 'HA_TOKEN', 'HA_HOTKEY', 'HA_MICROPHONE_INDEX',
+                    'HA_HOST', 'HA_TOKEN', 'HA_MICROPHONE_INDEX',
                     'HA_OUTPUT_DEVICE_INDEX', 'HA_SAMPLE_RATE', 'HA_OUTPUT_SAMPLE_RATE',
                     'HA_FRAME_DURATION_MS', 'ANIMATION_PORT', 'CONNECTION_MODE',
                     'DEVICE_NAME', 'ESPHOME_PORT', 'HA_SILENCE_THRESHOLD_SEC', 'HA_VAD_MODE'
@@ -2107,6 +2108,10 @@ class FletSettingsApp:
                         wake_word_changed = True
                         break
 
+                # Check if hotkey settings changed
+                hotkey_changed = (str(self.current_settings.get('HA_HOTKEY', '')).strip().lower() != 
+                                  str(new_settings.get('HA_HOTKEY', '')).strip().lower())
+
                 # Also update simple UI parameters directly on self.main_app
                 if self.main_app:
                     self.main_app.animations_enabled = utils.get_env_bool("HA_ANIMATIONS_ENABLED", True)
@@ -2120,16 +2125,26 @@ class FletSettingsApp:
                         wake_word_restarted = True
                     except Exception as e:
                         logger.error(f"Error during wake word restart: {e}")
+
+                # Trigger hotkey reload dynamically in-place
+                hotkey_reloaded = False
+                if self.main_app and hotkey_changed:
+                    try:
+                        self.main_app.reload_hotkey()
+                        hotkey_reloaded = True
+                    except Exception as e:
+                        logger.error(f"Error during hotkey reload: {e}")
                 
                 # Prepare message for the user
                 if needs_restart:
-                    msg = "Settings saved successfully!\n\nSome of the changes you made (e.g. connection, hotkey, or audio device settings) require a restart of WinVE to take effect. Please restart the application."
-                elif wake_word_restarted:
-                    msg = "Settings saved successfully!\n\nWake word detection settings have been updated and restarted in-place."
+                    msg = "Settings saved successfully!\n\nSome of the changes you made (e.g. connection or audio device settings) require a restart of WinVE to take effect. Please restart the application."
+                elif wake_word_restarted or hotkey_reloaded:
+                    msg = "Settings saved successfully!\n\nSettings have been updated and applied in-place."
                 else:
                     msg = "Settings saved successfully!"
-                    if not self.main_app:
-                        msg += "\n\nWinVE is not running in this context. Restart WinVE to apply changes."
+                
+                if not self.main_app:
+                    msg += "\n\nWinVE is not running in this context. Restart WinVE to apply changes."
                 
                 # Update our settings cache
                 self.current_settings = new_settings.copy()
@@ -2299,6 +2314,12 @@ class FletSettingsApp:
                         except Exception as ex:
                             logger.error(f"Error restarting wake word on import: {ex}")
                             
+                        # Trigger hotkey reload in-place
+                        try:
+                            self.main_app.reload_hotkey()
+                        except Exception as ex:
+                            logger.error(f"Error reloading hotkeys on import: {ex}")
+                            
                         await self._show_dialog("Import Success", 
                             "Configuration imported successfully!\n\nWake word detection has been updated in-place. Since connection, hotkeys, or audio settings may have changed, please restart WinVE to apply them fully.")
                     else:
@@ -2452,6 +2473,12 @@ class FletSettingsApp:
                     self.main_app._restart_wake_word()
                 except Exception as ex:
                     logger.error(f"Error restarting wake word during restore defaults: {ex}")
+                    
+                # Trigger hotkey reload in-place
+                try:
+                    self.main_app.reload_hotkey()
+                except Exception as ex:
+                    logger.error(f"Error reloading hotkeys during restore defaults: {ex}")
                     
                 await self._show_dialog("Restore Defaults", 
                     "Default settings have been restored successfully!\n\nWake word detection has been reset in-place. Note: Since connection, hotkeys, or audio settings may have changed, please restart WinVE to apply them fully.")
