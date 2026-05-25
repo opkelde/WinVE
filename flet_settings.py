@@ -2001,6 +2001,9 @@ class FletSettingsApp:
             result = self._save_env_file(new_settings)
             
             if result['success']:
+                # Update os.environ in current process to reflect changes immediately
+                for k, v in new_settings.items():
+                    os.environ[k] = str(v)
                 # Check if models were altered
                 current_models = self._get_current_models_list()
                 models_altered = set(self.initial_wake_word_models) != set(current_models)

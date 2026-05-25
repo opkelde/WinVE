@@ -22,7 +22,7 @@ def get_env_bool(key, default=False):
             env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
         
         if os.path.exists(env_path):
-            load_dotenv(env_path)
+            load_dotenv(env_path, override=True)
             
         value = os.getenv(key)
         if value is None:
