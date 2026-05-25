@@ -908,6 +908,28 @@ class FletSettingsApp:
     
     async def _create_advanced_tab(self, current_settings):
         """Create advanced settings tab"""
+        # Restore Defaults buttons
+        self.restore_defaults_btn = ft.ElevatedButton(
+            "Restore Defaults",
+            icon=ft.Icons.RESTORE,
+            icon_color=ft.Colors.ORANGE_800,
+            on_click=self._on_restore_defaults_click
+        )
+        self.confirm_restore_btn = ft.ElevatedButton(
+            "Restore",
+            icon=ft.Icons.CHECK,
+            icon_color=ft.Colors.WHITE,
+            color=ft.Colors.WHITE,
+            bgcolor=ft.Colors.RED_600,
+            visible=False,
+            on_click=self._confirm_restore_defaults
+        )
+        self.cancel_restore_btn = ft.TextButton(
+            "Cancel",
+            visible=False,
+            on_click=self._cancel_restore_defaults
+        )
+
         # Interface settings
         self.animations_switch = ft.Switch(
             label="Enable visual animations (Three.js)",
@@ -1085,12 +1107,9 @@ class FletSettingsApp:
                                         allowed_extensions=["json"]
                                     )
                                 ),
-                                ft.ElevatedButton(
-                                    "Restore Defaults",
-                                    icon=ft.Icons.RESTORE,
-                                    icon_color=ft.Colors.ORANGE_800,
-                                    on_click=self._on_restore_defaults_click
-                                )
+                                self.restore_defaults_btn,
+                                self.confirm_restore_btn,
+                                self.cancel_restore_btn
                             ], spacing=20)
                         ]),
                         padding=20
@@ -2292,32 +2311,32 @@ class FletSettingsApp:
                 await self._show_dialog("Import Error", f"Error during import: {str(ex)}")
 
     async def _on_restore_defaults_click(self, e):
-        """Handle 'Restore Defaults' button click"""
-        self.confirm_dialog = ft.AlertDialog(
-            title=ft.Text("Confirm Restore Defaults"),
-            content=ft.Text("Are you sure you want to restore all settings to their factory defaults? This will delete the active configuration file (.env) and automatically restart WinVE."),
-            actions=[
-                ft.TextButton("Yes, Restore Defaults", on_click=self._confirm_restore_defaults, text_style=ft.TextStyle(color=ft.Colors.RED_600)),
-                ft.TextButton("Cancel", on_click=lambda _: self._close_dialog(self.confirm_dialog))
-            ],
-            modal=True
-        )
-        
-        self.page.dialog = self.confirm_dialog
-        self.confirm_dialog.open = True
+        """Handle 'Restore Defaults' button click - show inline confirm/cancel"""
+        self.restore_defaults_btn.visible = False
+        self.confirm_restore_btn.visible = True
+        self.cancel_restore_btn.visible = True
+        self.page.update()
+
+    async def _cancel_restore_defaults(self, e):
+        """Cancel restore defaults and hide confirm/cancel buttons"""
+        self.restore_defaults_btn.visible = True
+        self.confirm_restore_btn.visible = False
+        self.cancel_restore_btn.visible = False
         self.page.update()
 
     async def _confirm_restore_defaults(self, e_confirm):
-        """Execute default restoration and restart"""
-        if hasattr(self, 'confirm_dialog') and self.confirm_dialog:
-            self.confirm_dialog.open = False
-            self.page.update()
-            
+        """Execute default settings restoration in-place"""
+        # Hide confirm/cancel controls and restore main button
+        self.restore_defaults_btn.visible = True
+        self.confirm_restore_btn.visible = False
+        self.cancel_restore_btn.visible = False
+        self.page.update()
+        
         try:
             progress_dialog = ft.AlertDialog(
                 title=ft.Text("Restoring Defaults"),
                 content=ft.Column([
-                    ft.Text("Deleting configuration file and restarting WinVE..."),
+                    ft.Text("Restoring settings to factory defaults..."),
                     ft.ProgressRing()
                 ], height=80, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 modal=True
@@ -2326,39 +2345,119 @@ class FletSettingsApp:
             progress_dialog.open = True
             self.page.update()
             
-            # Delete active .env file
             env_path = utils.get_env_path()
-            if os.path.exists(env_path):
-                try:
-                    os.remove(env_path)
-                    logger.info(f"Successfully deleted env file: {env_path}")
-                except Exception as err:
-                    logger.error(f"Error deleting env file: {err}")
             
-            # Close progress dialog and page
+            # Resolve path to .env.example
+            import shutil
+            env_example_path = None
+            
+            # Candidate 1: same folder as active .env
+            candidate1 = os.path.join(os.path.dirname(env_path), '.env.example')
+            if os.path.exists(candidate1):
+                env_example_path = candidate1
+            else:
+                # Candidate 2: Roaming AppData (Windows Inno Setup path)
+                appdata = os.getenv('APPDATA')
+                if appdata:
+                    candidate2 = os.path.join(appdata, 'WinVE', '.env.example')
+                    if os.path.exists(candidate2):
+                        env_example_path = candidate2
+            
+            # If .env.example is found, copy it. Otherwise, use hardcoded defaults
+            if env_example_path:
+                shutil.copyfile(env_example_path, env_path)
+                logger.info(f"Restored default configuration from: {env_example_path}")
+            else:
+                # Fallback to hardcoded defaults matching .env.example
+                fallback_content = (
+                    "# === CONNECTION ===\n"
+                    "CONNECTION_MODE=esphome\n"
+                    "HA_HOST=\n"
+                    "HA_TOKEN=\n"
+                    "HA_PIPELINE_ID=\n\n"
+                    "# === ESPHOME SATELLITE MODE ===\n"
+                    "DEVICE_NAME=WinVE\n"
+                    "ESPHOME_PORT=6053\n"
+                    "DEVICE_MAC=\n\n"
+                    "# === ACTIVATION ===\n"
+                    "HA_HOTKEY=ctrl+shift+h\n\n"
+                    "# === AUDIO ===\n"
+                    "HA_SAMPLE_RATE=16000\n"
+                    "HA_CHANNELS=1\n"
+                    "HA_FRAME_DURATION_MS=30\n"
+                    "HA_PADDING_MS=300\n"
+                    "HA_MICROPHONE_INDEX=-1\n"
+                    "HA_OUTPUT_DEVICE_INDEX=-1\n"
+                    "HA_OUTPUT_SAMPLE_RATE=-1\n\n"
+                    "# === VOICE DETECTION (VAD) ===\n"
+                    "HA_VAD_MODE=3\n"
+                    "HA_SILENCE_THRESHOLD_SEC=1.5\n\n"
+                    "# === INTERFACE & PERFORMANCE ===\n"
+                    "HA_ANIMATIONS_ENABLED=true\n"
+                    "HA_RESPONSE_TEXT_ENABLED=true\n"
+                    "HA_SHOW_LISTENING_INDICATOR=true\n"
+                    "HA_SUPPRESS_FULLSCREEN=false\n\n"
+                    "# === NETWORK ===\n"
+                    "ANIMATION_PORT=8765\n\n"
+                    "# === AUDIO FEEDBACK ===\n"
+                    "HA_SOUND_FEEDBACK=false\n"
+                    "HA_CONTINUE_ON_QUESTION=false\n\n"
+                    "# === WAKE WORD DETECTION ===\n"
+                    "HA_WAKE_WORD_ENABLED=true\n"
+                    "HA_WAKE_WORD_MODELS=computer_v2\n"
+                    "HA_WAKE_WORD_THRESHOLD=0.5\n"
+                    "HA_WAKE_WORD_VAD_THRESHOLD=0.3\n"
+                    "HA_WAKE_WORD_NOISE_SUPPRESSION=false\n\n"
+                    "# === MEDIA PLAYER VOLUME MANAGEMENT ===\n"
+                    "HA_MEDIA_PLAYER_ENTITIES=\n"
+                    "HA_MEDIA_PLAYER_TARGET_VOLUME=0.3\n\n"
+                    "# === DEBUG ===\n"
+                    "DEBUG=false"
+                )
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.write(fallback_content)
+                logger.info("Restored default configuration using hardcoded fallback")
+
+            # Force reload dotenv in Python process
+            from dotenv import load_dotenv
+            load_dotenv(env_path, override=True)
+            
+            # Also reload os.environ for the loaded settings
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('#') and '=' in stripped:
+                        parts = stripped.split('=', 1)
+                        k = parts[0].strip().upper()
+                        v = parts[1].strip().strip('"').strip("'")
+                        os.environ[k] = v
+
+            # Close progress dialog
             progress_dialog.open = False
             self.page.update()
             
-            # Spawn a new WinVE process
-            import sys
-            import subprocess
+            # Reload UI fields with the restored defaults
+            self._reload_settings_in_ui()
             
-            logger.info("Spawning new WinVE process...")
-            subprocess.Popen([sys.executable] + sys.argv[1:])
+            # Update settings cache
+            self.current_settings = self._load_current_settings()
             
-            # Cleanup and quit main app if present
+            # Update simple UI parameters on main app immediately
             if self.main_app:
-                logger.info("Cleaning up main application...")
-                self.main_app.cleanup()
-                if self.main_app.tray_icon:
-                    try:
-                        self.main_app.tray_icon.stop()
-                    except:
-                        pass
-            
-            logger.info("Exiting current process...")
-            os._exit(0)
-            
+                self.main_app.animations_enabled = utils.get_env_bool("HA_ANIMATIONS_ENABLED", True)
+                self.main_app.response_text_enabled = utils.get_env_bool("HA_RESPONSE_TEXT_ENABLED", True)
+                
+                # Trigger wake word restart in-place
+                try:
+                    self.main_app._restart_wake_word()
+                except Exception as ex:
+                    logger.error(f"Error restarting wake word during restore defaults: {ex}")
+                    
+                await self._show_dialog("Restore Defaults", 
+                    "Default settings have been restored successfully!\n\nWake word detection has been reset in-place. Note: Since connection, hotkeys, or audio settings may have changed, please restart WinVE to apply them fully.")
+            else:
+                await self._show_dialog("Restore Defaults", 
+                    "Default settings have been restored successfully!\n\nRestart WinVE to apply the default settings.")
         except Exception as ex:
             logger.error(f"Restore defaults error: {ex}")
             if 'progress_dialog' in locals():
