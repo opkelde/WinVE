@@ -17,13 +17,19 @@ def get_env_bool(key, default=False):
     """Get environment variable as boolean with safe parsing from .env without loading utils."""
     try:
         import sys
+        env_paths = []
         if getattr(sys, 'frozen', False):
-            env_path = os.path.join(os.path.dirname(sys.executable), '.env')
+            primary = os.path.join(os.path.dirname(sys.executable), '.env')
+            env_paths.append(primary)
+            env_paths.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
         else:
-            env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+            env_paths.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+        env_paths.append('.env')
         
-        if os.path.exists(env_path):
-            load_dotenv(env_path, override=True)
+        for env_path in env_paths:
+            if os.path.exists(env_path):
+                load_dotenv(env_path, override=True)
+                break
             
         value = os.getenv(key)
         if value is None:

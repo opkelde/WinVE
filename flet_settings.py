@@ -5,6 +5,7 @@ Replaces the problematic Tkinter-based settings
 import flet as ft
 import asyncio
 import os
+from datetime import datetime
 import threading
 import webbrowser
 import subprocess
@@ -1074,11 +1075,7 @@ class FletSettingsApp:
                                 ft.ElevatedButton(
                                     "Export Backup...",
                                     icon=ft.Icons.DOWNLOAD,
-                                    on_click=lambda _: self.config_export_picker.save_file(
-                                        dialog_title="Export WinVE Backup",
-                                        file_name="winve_backup.json",
-                                        allowed_extensions=["json"]
-                                    )
+                                    on_click=self._on_export_backup_click
                                 ),
                                 ft.ElevatedButton(
                                     "Import Backup...",
@@ -1087,6 +1084,12 @@ class FletSettingsApp:
                                         dialog_title="Import WinVE Backup",
                                         allowed_extensions=["json"]
                                     )
+                                ),
+                                ft.ElevatedButton(
+                                    "Restore Defaults",
+                                    icon=ft.Icons.RESTORE,
+                                    icon_color=ft.Colors.ORANGE_800,
+                                    on_click=self._on_restore_defaults_click
                                 )
                             ], spacing=20)
                         ]),
@@ -2166,13 +2169,20 @@ class FletSettingsApp:
                 'success': True, 
                 'message': f'Settings saved to {os.path.basename(env_path)}'
             }
-            
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
             return {
                 'success': False, 
                 'message': f'Save error: {str(e)}'
             }
+
+    def _on_export_backup_click(self, e):
+        """Trigger config export file dialog with timestamped filename"""
+        self.config_export_picker.save_file(
+            dialog_title="Export WinVE Backup",
+            file_name=f"winve_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            allowed_extensions=["json"]
+        )
 
     async def _on_config_export_result(self, e: ft.FilePickerResultEvent):
         """Handle config export file dialog result"""
@@ -2224,6 +2234,149 @@ class FletSettingsApp:
             except Exception as ex:
                 logger.error(f"Import error: {ex}")
                 await self._show_dialog("Import Error", f"Error during import: {str(ex)}")
+
+    async def _on_restore_defaults_click(self, e):
+        """Handle 'Restore Defaults' button click"""
+        
+        async def confirm_restore(e_confirm):
+            confirm_dialog.open = False
+            self.page.update()
+            
+            try:
+                progress_dialog = ft.AlertDialog(
+                    title=ft.Text("Restoring Defaults"),
+                    content=ft.Column([
+                        ft.Text("Restoring settings to factory defaults..."),
+                        ft.ProgressRing()
+                    ], height=80, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    modal=True
+                )
+                self.page.dialog = progress_dialog
+                progress_dialog.open = True
+                self.page.update()
+                
+                env_path = utils.get_env_path()
+                
+                # Resolve path to .env.example
+                import shutil
+                env_example_path = None
+                
+                # Candidate 1: same folder as active .env
+                candidate1 = os.path.join(os.path.dirname(env_path), '.env.example')
+                if os.path.exists(candidate1):
+                    env_example_path = candidate1
+                else:
+                    # Candidate 2: Roaming AppData (Windows Inno Setup path)
+                    appdata = os.getenv('APPDATA')
+                    if appdata:
+                        candidate2 = os.path.join(appdata, 'WinVE', '.env.example')
+                        if os.path.exists(candidate2):
+                            env_example_path = candidate2
+                
+                # If .env.example is found, copy it. Otherwise, use hardcoded defaults
+                if env_example_path:
+                    shutil.copyfile(env_example_path, env_path)
+                    logger.info(f"Restored default configuration from: {env_example_path}")
+                else:
+                    # Fallback to hardcoded defaults matching .env.example
+                    fallback_content = (
+                        "# === CONNECTION ===\n"
+                        "CONNECTION_MODE=esphome\n"
+                        "HA_HOST=\n"
+                        "HA_TOKEN=\n"
+                        "HA_PIPELINE_ID=\n\n"
+                        "# === ESPHOME SATELLITE MODE ===\n"
+                        "DEVICE_NAME=WinVE\n"
+                        "ESPHOME_PORT=6053\n"
+                        "DEVICE_MAC=\n\n"
+                        "# === ACTIVATION ===\n"
+                        "HA_HOTKEY=ctrl+shift+h\n\n"
+                        "# === AUDIO ===\n"
+                        "HA_SAMPLE_RATE=16000\n"
+                        "HA_CHANNELS=1\n"
+                        "HA_FRAME_DURATION_MS=30\n"
+                        "HA_PADDING_MS=300\n"
+                        "HA_MICROPHONE_INDEX=-1\n"
+                        "HA_OUTPUT_DEVICE_INDEX=-1\n"
+                        "HA_OUTPUT_SAMPLE_RATE=-1\n\n"
+                        "# === VOICE DETECTION (VAD) ===\n"
+                        "HA_VAD_MODE=3\n"
+                        "HA_SILENCE_THRESHOLD_SEC=1.5\n\n"
+                        "# === INTERFACE & PERFORMANCE ===\n"
+                        "HA_ANIMATIONS_ENABLED=true\n"
+                        "HA_RESPONSE_TEXT_ENABLED=true\n"
+                        "HA_SHOW_LISTENING_INDICATOR=true\n"
+                        "HA_SUPPRESS_FULLSCREEN=false\n\n"
+                        "# === NETWORK ===\n"
+                        "ANIMATION_PORT=8765\n\n"
+                        "# === AUDIO FEEDBACK ===\n"
+                        "HA_SOUND_FEEDBACK=false\n"
+                        "HA_CONTINUE_ON_QUESTION=false\n\n"
+                        "# === WAKE WORD DETECTION ===\n"
+                        "HA_WAKE_WORD_ENABLED=true\n"
+                        "HA_WAKE_WORD_MODELS=computer_v2\n"
+                        "HA_WAKE_WORD_THRESHOLD=0.5\n"
+                        "HA_WAKE_WORD_VAD_THRESHOLD=0.3\n"
+                        "HA_WAKE_WORD_NOISE_SUPPRESSION=false\n\n"
+                        "# === MEDIA PLAYER VOLUME MANAGEMENT ===\n"
+                        "HA_MEDIA_PLAYER_ENTITIES=\n"
+                        "HA_MEDIA_PLAYER_TARGET_VOLUME=0.3\n\n"
+                        "# === DEBUG ===\n"
+                        "DEBUG=false"
+                    )
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.write(fallback_content)
+                    logger.info("Restored default configuration using hardcoded fallback")
+
+                # Force reload dotenv in Python process
+                from dotenv import load_dotenv
+                load_dotenv(env_path, override=True)
+                
+                # Also reload os.environ for the loaded settings
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        stripped = line.strip()
+                        if stripped and not stripped.startswith('#') and '=' in stripped:
+                            parts = stripped.split('=', 1)
+                            k = parts[0].strip().upper()
+                            v = parts[1].strip().strip('"').strip("'")
+                            os.environ[k] = v
+
+                # Close loading dialog
+                progress_dialog.open = False
+                self.page.update()
+                
+                # Reload UI fields with the restored defaults
+                self._reload_settings_in_ui()
+                
+                # Trigger wake word restart if main app is present
+                if self.main_app:
+                    try:
+                        self.main_app._restart_wake_word()
+                    except Exception as ex:
+                        logger.error(f"Error restarting wake word during restore defaults: {ex}")
+                
+                await self._show_dialog("Restore Defaults", 
+                    "Default settings have been restored successfully!\n\nGUI fields have been reloaded. Click 'Save Settings' to confirm and restart any active wake word models.")
+            except Exception as ex:
+                logger.error(f"Restore defaults error: {ex}")
+                progress_dialog.open = False
+                self.page.update()
+                await self._show_dialog("Restore Failed", f"Failed to restore default settings:\n\n{str(ex)}")
+
+        confirm_dialog = ft.AlertDialog(
+            title=ft.Text("Confirm Restore Defaults"),
+            content=ft.Text("Are you sure you want to restore all settings to their factory defaults? This will overwrite your current configuration."),
+            actions=[
+                ft.TextButton("Yes, Restore Defaults", on_click=confirm_restore, text_style=ft.TextStyle(color=ft.Colors.RED_600)),
+                ft.TextButton("Cancel", on_click=lambda _: self._close_dialog(confirm_dialog))
+            ],
+            modal=True
+        )
+        
+        self.page.dialog = confirm_dialog
+        confirm_dialog.open = True
+        self.page.update()
 
     def _reload_settings_in_ui(self):
         """Reload environment settings and update all input controls in-place."""

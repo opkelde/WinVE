@@ -106,14 +106,8 @@ class ConfigImportExportManager:
         if not settings:
             return False, "Settings block is empty."
             
-        # 2. Backup existing config
-        if create_backup and os.path.exists(self.env_path):
-            backup_path = f"{self.env_path}.bak_{int(time.time())}"
-            try:
-                shutil.copyfile(self.env_path, backup_path)
-                logger.info(f"Created config backup at: {backup_path}")
-            except Exception as e:
-                return False, f"Failed to create config backup: {str(e)}"
+        # 2. Backup existing config (disabled to prevent file clutter)
+        pass
 
         # 3. Write imported .env configuration file
         try:

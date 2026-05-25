@@ -21,7 +21,16 @@ def get_env_path():
     else:
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 
-load_dotenv(get_env_path())
+# First try the primary .env path, then fallback paths
+primary_env = get_env_path()
+if os.path.exists(primary_env):
+    load_dotenv(primary_env, override=True)
+else:
+    # Try the fallback paths
+    for fb in [os.path.join(os.path.dirname(__file__), '.env'), '.env']:
+        if os.path.exists(fb):
+            load_dotenv(fb, override=True)
+            break
 
 def safe_print(text):
     """

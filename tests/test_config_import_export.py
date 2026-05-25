@@ -81,9 +81,14 @@ def test_config_import_success(tmp_path):
     
     manager = ConfigImportExportManager(env_path=str(mock_env))
     
-    # Run import (without creating backup file, to keep tmp directory clean)
-    success, msg = manager.import_config(str(src_file), create_backup=False)
+    # Run import (verify that no .env.bak_* backup files are created)
+    success, msg = manager.import_config(str(src_file), create_backup=True)
     assert success is True
+    
+    # Verify no .env.bak_* files were created
+    import os
+    bak_files = [f for f in os.listdir(tmp_path) if f.startswith(".env.bak_")]
+    assert len(bak_files) == 0
     
     # Check env changes
     env_content = mock_env.read_text(encoding="utf-8")
