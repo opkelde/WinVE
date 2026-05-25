@@ -7,6 +7,19 @@ import sys
 import subprocess
 import argparse
 
+# Reconfigure stdout/stderr to utf-8 if possible to avoid CP1252 encoding crashes on Windows terminals
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+
 
 def run_command(command, description):
     """Run a command and handle errors."""

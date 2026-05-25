@@ -22,7 +22,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
-LicenseFile=.\LICENSE.txt
+LicenseFile=.\LICENSE
 InfoBeforeFile=.\pre-install-info.txt
 InfoAfterFile=.\post-install-info.txt
 PrivilegesRequired=lowest
@@ -150,18 +150,19 @@ begin
       '' + #13#10 +
       '# === INTERFACE & PERFORMANCE ===' + #13#10 +
       'HA_ANIMATIONS_ENABLED=true' + #13#10 +
-      'HA_RESPONSE_TEXT_ENABLED=false' + #13#10 +
+      'HA_RESPONSE_TEXT_ENABLED=true' + #13#10 +
+      'HA_SHOW_LISTENING_INDICATOR=true' + #13#10 +
       '' + #13#10 +
       '# === NETWORK ===' + #13#10 +
       'ANIMATION_PORT=8765' + #13#10 +
       '' + #13#10 +
       '# === AUDIO FEEDBACK ===' + #13#10 +
-      'HA_SOUND_FEEDBACK=true' + #13#10 +
+      'HA_SOUND_FEEDBACK=false' + #13#10 +
       'HA_CONTINUE_ON_QUESTION=false' + #13#10 +
       '' + #13#10 +
       '# === WAKE WORD DETECTION ===' + #13#10 +
       'HA_WAKE_WORD_ENABLED=true' + #13#10 +
-      'HA_WAKE_WORD_MODELS=alexa' + #13#10 +
+      'HA_WAKE_WORD_MODELS=computer_v2' + #13#10 +
       'HA_WAKE_WORD_THRESHOLD=0.5' + #13#10 +
       'HA_WAKE_WORD_VAD_THRESHOLD=0.3' + #13#10 +
       'HA_WAKE_WORD_NOISE_SUPPRESSION=false' + #13#10 +

@@ -11,7 +11,7 @@ Featuring premium modern UI, visual text feedback, optional activation/deactivat
 - **Audio-Reactive Border** — The thickness and blur intensity of the glowing border scale dynamically in real time based on your voice volume.
 - **Wake Word Detection** — Built-in openWakeWord support with pre-trained models (Computer by default) running locally on your CPU.
 - **WebRTC VAD** — High-quality voice activity detection to start/stop listening accurately.
-- **Flet-Based Settings UI** — A modern settings window to configure audio devices, wake words, thresholds, and optional Home Assistant integrations.
+- **Flet-Based Settings UI** — A modern settings window to configure audio devices, wake words, thresholds, and optional Home Assistant integrations. Includes convenient in-window control buttons for pausing, resuming, getting the status of, or restarting local wake word detection, with automatic reload when saving modified models.
 - **System Tray Integration** — Runs completely in the background within the Windows system tray.
 - **Media Player Volume Management** — Automatically ducks and restores the volume of configured Home Assistant media players when you start speaking.
 - **Interactive Prompts Support** — Accepts incoming prompts from Home Assistant via its HTTP API, allowing Home Assistant to ask you questions and receive voice responses.
@@ -29,7 +29,7 @@ Featuring premium modern UI, visual text feedback, optional activation/deactivat
 ##  Installation
 
 ### Option 1: Windows Installer (Recommended)
-1. Download `WinVE-Setup.exe` from the latest release.
+1. Download `WinVE-Setup.exe` from the latest release or build it using `build.bat`.
 2. Run the installer and follow the wizard.
 3. Configure your device name (default `WinVE`) and optional Home Assistant credentials for media player volume control.
 4. Launch the application.

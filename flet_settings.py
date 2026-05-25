@@ -16,8 +16,21 @@ from audio import AudioManager
 logger = utils.setup_logger()
 
 class FletSettingsApp:
-    def __init__(self, animation_server=None):
-        self.animation_server = animation_server
+    def __init__(self, main_app=None):
+        # Import HAAssistApp locally to avoid circular dependencies
+        try:
+            from main import HAAssistApp
+            is_main_app = isinstance(main_app, HAAssistApp)
+        except ImportError:
+            is_main_app = False
+
+        if main_app is not None and not is_main_app and hasattr(main_app, 'change_state'):
+            self.main_app = None
+            self.animation_server = main_app
+        else:
+            self.main_app = main_app
+            self.animation_server = main_app.animation_server if main_app else None
+
         self.pipelines_data = []
         self.test_client = None
         self.mic_mapping = {}
@@ -89,6 +102,9 @@ class FletSettingsApp:
         # Create main layout
         self.page = page
         await self._create_ui(current_settings)
+        
+        # Query initial wake word status from running main process
+        page.run_task(self._query_initial_wake_word_status)
         
     def _load_current_settings(self):
         """Load current settings from environment"""
@@ -583,11 +599,53 @@ class FletSettingsApp:
             active_color=ft.Colors.INDIGO_600
         )
         
+        # Add Model button
+        self.add_model_button = ft.ElevatedButton(
+            "Add Model",
+            icon=ft.Icons.ADD,
+            on_click=self._add_wake_word_model
+        )
+
+        # Control & Status buttons
+        self.pause_wake_word_button = ft.ElevatedButton(
+            "Pause wake word",
+            icon=ft.Icons.PAUSE,
+            on_click=self._on_pause_wake_word_click,
+            style=ft.ButtonStyle(color=ft.Colors.ORANGE_800),
+            disabled=True
+        )
+        
+        self.wake_word_status_button = ft.ElevatedButton(
+            "Wake word status",
+            icon=ft.Icons.INFO,
+            on_click=self._on_wake_word_status_click,
+            style=ft.ButtonStyle(color=ft.Colors.BLUE_800),
+            disabled=True
+        )
+        
+        self.restart_wake_word_button = ft.ElevatedButton(
+            "Restart wake word",
+            icon=ft.Icons.REFRESH,
+            on_click=self._on_restart_wake_word_click,
+            style=ft.ButtonStyle(color=ft.Colors.PURPLE_800),
+            disabled=True
+        )
+        
+        self.control_status_text = ft.Text(
+            "Checking connection to running WinVE...",
+            size=12,
+            italic=True,
+            color=ft.Colors.GREY_600
+        )
+        
         # Populate selected models
         await self._populate_wake_word_models(current_settings['HA_WAKE_WORD_MODELS'])
         
         # Enable/disable controls based on initial state
         await self._toggle_wake_word_controls()
+
+        # Track initial wake word models
+        self.initial_wake_word_models = self._get_current_models_list()
         
         return ft.Container(
             content=ft.Column([
@@ -616,11 +674,7 @@ class FletSettingsApp:
                             ft.Text("📋 Model Configuration", size=18, weight=ft.FontWeight.BOLD),
                             ft.Row([
                                 self.available_models_dropdown,
-                                ft.ElevatedButton(
-                                    "Add Model",
-                                    icon=ft.Icons.ADD,
-                                    on_click=self._add_wake_word_model
-                                )
+                                self.add_model_button
                             ], spacing=10),
                             ft.Container(height=10),
                             ft.Text("Selected Models:", size=14, weight=ft.FontWeight.W_500),
@@ -655,6 +709,24 @@ class FletSettingsApp:
                                    size=12, color=ft.Colors.GREY_600),
                             ft.Container(height=15),
                             self.noise_suppression_switch
+                        ]),
+                        padding=20
+                    ),
+                    elevation=2
+                ),
+                
+                # Controls card
+                ft.Card(
+                    content=ft.Container(
+                        content=ft.Column([
+                            ft.Text("⚡ Wake Word Controls", size=18, weight=ft.FontWeight.BOLD),
+                            ft.Row([
+                                self.pause_wake_word_button,
+                                self.wake_word_status_button,
+                                self.restart_wake_word_button
+                            ], spacing=10, wrap=True),
+                            ft.Container(height=5),
+                            self.control_status_text,
                         ]),
                         padding=20
                     ),
@@ -1044,6 +1116,7 @@ class FletSettingsApp:
         # List of controls to toggle
         controls = [
             self.available_models_dropdown,
+            self.add_model_button,
             self.wake_threshold_slider,
             self.vad_threshold_slider,
             self.noise_suppression_switch
@@ -1054,8 +1127,8 @@ class FletSettingsApp:
         
         # Also disable the selected models
         for control in self.selected_models_column.controls:
-            if hasattr(control, 'trailing') and hasattr(control.trailing, 'disabled'):
-                control.trailing.disabled = not enabled
+            if hasattr(control, 'content') and hasattr(control.content, 'controls') and len(control.content.controls) > 2:
+                control.content.controls[2].disabled = not enabled
         
         self.page.update()
     
@@ -1276,7 +1349,7 @@ class FletSettingsApp:
                         ft.Icons.DELETE,
                         icon_color=ft.Colors.RED_600,
                         tooltip="Remove model",
-                        on_click=lambda e, m=model: self._remove_model_by_name(m)
+                        on_click=lambda e, m=model: self.page.run_task(self._remove_model_by_name, m)
                     )
                 ]),
                 padding=10,
@@ -1293,7 +1366,7 @@ class FletSettingsApp:
         
         self.page.update()
     
-    def _add_wake_word_model(self, e):
+    async def _add_wake_word_model(self, e):
         """Add wake word model to selected list"""
         model = self.available_models_dropdown.value
         if not model:
@@ -1321,7 +1394,7 @@ class FletSettingsApp:
                     ft.Icons.DELETE,
                     icon_color=ft.Colors.RED_600,
                     tooltip="Remove model",
-                    on_click=lambda _, m=model: self._remove_model_by_name(m)
+                    on_click=lambda e, m=model: self.page.run_task(self._remove_model_by_name, m)
                 )
             ]),
             padding=10,
@@ -1335,7 +1408,7 @@ class FletSettingsApp:
         
         logger.info(f"Added wake word model: {model}")
     
-    def _remove_model_by_name(self, model_name):
+    async def _remove_model_by_name(self, model_name):
         """Remove model by name"""
         self.selected_models_column.controls = [
             control for control in self.selected_models_column.controls 
@@ -1354,6 +1427,115 @@ class FletSettingsApp:
         
         self.page.update()
         logger.info(f"Removed wake word model: {model_name}")
+    
+    def _get_current_models_list(self):
+        """Get the list of currently selected wake word models from the UI column"""
+        selected_models = []
+        for control in self.selected_models_column.controls:
+            if (hasattr(control, 'content') and hasattr(control.content, 'controls') and
+                len(control.content.controls) > 1 and hasattr(control.content.controls[1], 'value')):
+                selected_models.append(control.content.controls[1].value)
+        return selected_models
+
+    async def _query_initial_wake_word_status(self):
+        """Query status of running WinVE and update button states."""
+        if self.main_app and self.main_app.wake_word_detector:
+            info = self.main_app.wake_word_detector.get_model_info()
+            self.control_status_text.value = "Connected to running WinVE"
+            self.control_status_text.color = ft.Colors.GREEN_600
+            
+            # Enable status and restart buttons
+            self.wake_word_status_button.disabled = False
+            self.restart_wake_word_button.disabled = False
+            
+            # Handle pause/resume button label and disabled status
+            if info.get("enabled"):
+                self.pause_wake_word_button.disabled = False
+                if info.get("is_running"):
+                    self.pause_wake_word_button.text = "Pause wake word"
+                    self.pause_wake_word_button.icon = ft.Icons.PAUSE
+                else:
+                    self.pause_wake_word_button.text = "Resume wake word"
+                    self.pause_wake_word_button.icon = ft.Icons.PLAY_ARROW
+            else:
+                self.pause_wake_word_button.disabled = True
+                self.pause_wake_word_button.text = "Pause wake word"
+                self.pause_wake_word_button.icon = ft.Icons.PAUSE
+        else:
+            self.control_status_text.value = "WinVE main process is not running in this context"
+            self.control_status_text.color = ft.Colors.GREY_600
+            self.pause_wake_word_button.disabled = True
+            self.wake_word_status_button.disabled = True
+            self.restart_wake_word_button.disabled = True
+            
+        self.page.update()
+
+    async def _on_pause_wake_word_click(self, e):
+        """Handle pause/resume button click."""
+        if not self.main_app or not self.main_app.wake_word_detector:
+            return
+            
+        self.pause_wake_word_button.disabled = True
+        self.page.update()
+        
+        self.main_app._toggle_wake_word_detection()
+        
+        # Query status again to update UI
+        await self._query_initial_wake_word_status()
+        
+        self.pause_wake_word_button.disabled = False
+        self.page.update()
+
+    async def _on_wake_word_status_click(self, e):
+        """Handle wake word status button click."""
+        if not self.main_app or not self.main_app.wake_word_detector:
+            return
+            
+        self.wake_word_status_button.disabled = True
+        self.page.update()
+        
+        # Call the existing status show function (which prints to console/animation)
+        self.main_app._show_wake_word_status()
+        
+        # Also show dialog inside FletSettings
+        info = self.main_app.wake_word_detector.get_model_info()
+        status_lines = [
+            f"Enabled: {'Yes' if info.get('enabled') else 'No'}",
+            f"Running: {'Yes' if info.get('is_running') else 'No'}",
+            f"Selected Models: {', '.join(info.get('selected_models', []))}",
+            f"Threshold: {info.get('detection_threshold', 0.5)}",
+            f"VAD Threshold: {info.get('vad_threshold', 0.0)}",
+            f"Noise Suppression: {'Yes' if info.get('noise_suppression') else 'No'}",
+            f"Available Models: {len(info.get('available_models', []))}"
+        ]
+        
+        await self._show_dialog(
+            "Wake Word Status",
+            "\n".join(status_lines)
+        )
+        
+        self.wake_word_status_button.disabled = False
+        self.page.update()
+
+    async def _on_restart_wake_word_click(self, e):
+        """Handle restart wake word button click."""
+        if not self.main_app:
+            return
+            
+        self.restart_wake_word_button.disabled = True
+        self.page.update()
+        
+        self.control_status_text.value = "Restarting wake word..."
+        self.control_status_text.color = ft.Colors.PURPLE_600
+        self.page.update()
+        
+        self.main_app._restart_wake_word()
+        
+        # Query status again to update UI
+        await self._query_initial_wake_word_status()
+        
+        self.restart_wake_word_button.disabled = False
+        self.page.update()
     
     async def _refresh_media_players_async(self):
         """Refresh available media players list"""
@@ -1482,16 +1664,22 @@ class FletSettingsApp:
         """Refresh available wake word models list"""
         try:
             models_dir = os.path.join(os.path.dirname(__file__), 'models')
+            fallback_models_dir = os.path.join(os.getcwd(), 'models')
+            search_dirs = [models_dir]
+            if os.path.abspath(fallback_models_dir) != os.path.abspath(models_dir):
+                search_dirs.append(fallback_models_dir)
+                
             default_models = ["alexa", "hey_jarvis", "hey_mycroft", "timers", "weather"]
             available_models = default_models.copy()
             
-            # Add custom models from models directory
-            if os.path.exists(models_dir):
-                for filename in os.listdir(models_dir):
-                    if filename.endswith(('.onnx', '.tflite')):
-                        model_name = os.path.splitext(filename)[0]
-                        if model_name not in available_models:
-                            available_models.append(model_name)
+            # Add custom models from models directories
+            for s_dir in search_dirs:
+                if os.path.exists(s_dir):
+                    for filename in os.listdir(s_dir):
+                        if filename.endswith(('.onnx', '.tflite')):
+                            model_name = os.path.splitext(filename)[0]
+                            if model_name not in available_models:
+                                available_models.append(model_name)
             
             # Update dropdown options
             options = []
@@ -1819,9 +2007,33 @@ class FletSettingsApp:
             result = self._save_env_file(new_settings)
             
             if result['success']:
-                await self._show_dialog("Settings Saved", 
-                    f"{result['message']}\n\nRestart WinVE to apply changes.",
-                    on_close=lambda: self.page.window.close())
+                # Check if models were altered
+                current_models = self._get_current_models_list()
+                models_altered = set(self.initial_wake_word_models) != set(current_models)
+                
+                restarted_automatically = False
+                if models_altered and self.main_app:
+                    logger.info("Wake word models altered. Triggering automatic restart...")
+                    try:
+                        self.main_app._restart_wake_word()
+                        restarted_automatically = True
+                    except Exception as e:
+                        logger.error(f"Error during automatic wake word restart: {e}")
+                
+                if restarted_automatically:
+                    await self._show_dialog("Settings Saved", 
+                        "Settings saved successfully!\n\nWake word detection has been automatically restarted with the new models.",
+                        on_close=lambda: self.page.window.close())
+                else:
+                    msg = "Settings saved successfully!"
+                    if self.main_app:
+                        msg += "\n\nChanges have been saved."
+                    else:
+                        msg += "\n\nWinVE is not running in this context. Restart WinVE to apply changes."
+                    
+                    await self._show_dialog("Settings Saved", 
+                        msg,
+                        on_close=lambda: self.page.window.close())
                 
                 if self.animation_server:
                     self.animation_server.show_success("Settings saved", duration=3.0)
@@ -1968,10 +2180,10 @@ class FletSettingsApp:
             thread.join(timeout=timeout)
 
 
-def show_flet_settings(animation_server=None):
+def show_flet_settings(main_app=None):
     """Show Flet-based settings dialog - main entry point"""
     try:
-        app = FletSettingsApp(animation_server)
+        app = FletSettingsApp(main_app)
         # Use threading to avoid signal issues when called from tray menu
         import threading
         

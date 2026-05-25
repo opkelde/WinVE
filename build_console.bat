@@ -118,9 +118,10 @@ echo.
 :: Step 5: Build installer with Inno Setup
 echo [5/5] Building installer with Inno Setup...
 set INNO_PATH="C:\Program Files (x86)\Inno Setup 6\Compil32.exe"
+if not exist %INNO_PATH% set INNO_PATH="%LOCALAPPDATA%\Programs\Inno Setup 6\Compil32.exe"
 if not exist %INNO_PATH% (
-    echo   Inno Setup not found at %INNO_PATH%
-    echo   Please install Inno Setup 6 or update the path
+    echo   Inno Setup not found in standard paths.
+    echo   Please install Inno Setup 6 or update the path in build_console.bat
     echo   Skipping installer build...
     goto :skip_installer
 )

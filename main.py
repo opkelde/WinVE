@@ -389,21 +389,19 @@ class HAAssistApp:
         self.animation_server.start()
     
     def open_settings(self, icon=None, item=None):
-        """Open enhanced settings window in a separate process."""
-        logger.info("Opening enhanced settings in a separate process...")
+        """Open enhanced settings window in the same process."""
+        logger.info("Opening enhanced settings...")
         try:
-            import subprocess
-            import sys
+            from flet_settings import show_flet_settings
             
-            if getattr(sys, 'frozen', False):
-                # Compiled executable
-                exe_path = sys.executable
-                subprocess.Popen([exe_path, "--settings-only"])
-            else:
-                # Source mode
-                main_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py")
-                subprocess.Popen([sys.executable, main_path, "--settings-only"])
-            logger.info("Settings process launched.")
+            if self.settings_window:
+                try:
+                    self.settings_window.close(timeout=1.0)
+                except Exception:
+                    pass
+            
+            self.settings_window = show_flet_settings(main_app=self)
+            logger.info("Settings window opened in the same process.")
         except Exception as e:
             logger.exception(f"Error opening settings: {e}")
             
