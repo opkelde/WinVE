@@ -325,23 +325,14 @@ def play_audio_from_url(url, host, animation_server=None, done_callback=None):
             logger.info(f"Resampling audio from {samplerate}Hz to {output_sample_rate}Hz")
             data = _resample_audio(data, samplerate, output_sample_rate)
             samplerate = output_sample_rate
-        if animation_server:
-            logger.info(f"Playing with FFT analysis (samplerate: {samplerate})...")
-            result = _play_with_fft_analysis(
-                data,
-                samplerate,
-                animation_server,
-                output_device_index
-            )
+        logger.info(f"Standard playback (samplerate: {samplerate})...")
+        if output_device_index is not None:
+            sd.play(data, samplerate, device=output_device_index)
         else:
-            logger.info(f"Standard playback (samplerate: {samplerate})...")
-            if output_device_index is not None:
-                sd.play(data, samplerate, device=output_device_index)
-            else:
-                sd.play(data, samplerate)
-            sd.wait()
-            logger.info("Audio playback completed")
-            result = True
+            sd.play(data, samplerate)
+        sd.wait()
+        logger.info("Audio playback completed")
+        result = True
 
         if done_callback:
             try:
@@ -358,98 +349,6 @@ def play_audio_from_url(url, host, animation_server=None, done_callback=None):
             except Exception:
                 pass
         return False
-
-def _play_with_fft_analysis(audio_data, samplerate, animation_server, output_device_index=None):
-    """
-    Play audio and simultaneously send FFT data to animation server.
-    Uses simple sd.play() + sd.wait() for reliable playback.
-    """
-    logger = setup_logger()
-
-    try:
-        chunk_size = 1024  # FFT chunk size
-
-        # Convert stereo to mono for FFT analysis (keep original for playback)
-        if len(audio_data.shape) > 1:
-            fft_data = np.mean(audio_data, axis=1)
-        else:
-            fft_data = audio_data
-
-        # Convert FFT data to int16 for animation
-        if fft_data.dtype != np.int16:
-            if np.abs(fft_data).max() <= 1.0:
-                fft_data = (fft_data * 32767).astype(np.int16)
-            else:
-                fft_data = fft_data.astype(np.int16)
-
-        total_samples = len(fft_data)
-        duration = total_samples / samplerate
-        logger.info(f"Starting playback with FFT analysis... Duration: {duration:.2f}s")
-
-        # Start FFT analysis in background thread
-        stop_fft = threading.Event()
-
-        def fft_thread_func():
-            """Send FFT data to animation server during playback."""
-            samples_sent = 0
-            start_time = time.time()
-
-            while not stop_fft.is_set() and samples_sent < total_samples:
-                elapsed = time.time() - start_time
-                target_sample = int(elapsed * samplerate)
-
-                if target_sample > samples_sent and samples_sent < total_samples:
-                    chunk_end = min(samples_sent + chunk_size, total_samples)
-                    chunk_data = fft_data[samples_sent:chunk_end]
-
-                    if len(chunk_data) > 0:
-                        _send_fft_to_animation(chunk_data, animation_server)
-
-                    samples_sent = chunk_end
-
-                time.sleep(0.02)  # ~50 FPS for smooth animation
-
-        fft_thread = threading.Thread(target=fft_thread_func, daemon=True)
-        fft_thread.start()
-
-        # Play audio using simple sd.play() + sd.wait()
-        # This is the most reliable method
-        play_kwargs = {}
-        if output_device_index is not None:
-            play_kwargs['device'] = output_device_index
-
-        sd.play(audio_data, samplerate, **play_kwargs)
-        sd.wait()  # Block until playback is complete
-
-        # Stop FFT thread
-        stop_fft.set()
-        fft_thread.join(timeout=1.0)
-
-        logger.info("FFT analysis playback completed")
-        return True
-
-    except Exception as e:
-        logger.exception(f"FFT analysis playback error: {str(e)}")
-        return False
-
-def _send_fft_to_animation(audio_chunk, animation_server):
-    """
-    Perform FFT analysis and send data to animation server.
-    Called in separate thread.
-    """
-    try:
-        if len(audio_chunk) == 0:
-            return
-            
-        if audio_chunk.dtype != np.int16:
-            audio_chunk = audio_chunk.astype(np.int16)
-        audio_chunk = (audio_chunk * 0.6).astype(np.int16)
-        audio_bytes = audio_chunk.tobytes()
-        
-        animation_server.send_audio_data(audio_bytes, 16000)
-        
-    except Exception as e:
-        pass
 
 def validate_audio_format(sample_rate, channels=1):
     """Validate audio parameters."""

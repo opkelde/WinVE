@@ -55,7 +55,6 @@ py -m PyInstaller --name "WinVE" ^
     --noconsole ^
     --additional-hooks-dir "pyinstaller_hooks" ^
     --icon "img/icon.ico" ^
-    --add-data "frontend;frontend" ^
     --add-data "sound;sound" ^
     --add-data "img;img" ^
     --add-data "models;models" ^

@@ -2,28 +2,31 @@
 
 WinVE is a lightweight, high-performance Windows desktop voice satellite endpoint for Home Assistant. It runs as a native ESPHome voice satellite, allowing you to use your PC's microphone and speakers as a native voice assistant endpoint with full support for timers, follow-up conversation modes, and media player ducking.
 
-Featuring a premium, borderless Siri-style glowing visual feedback overlay that reacts dynamically to your voice volume, WinVE is designed to be completely unobtrusive — showing absolutely no screen artifacts when idle, and appearing as a stunning rotating gradient border only when active.
+Featuring premium modern UI, visual text feedback, optional activation/deactivation sounds, and customizable timer chime. WinVE is designed to be completely unobtrusive, showing absolutely no screen artifacts when idle, and appearing as a stunning rotating gradient border only when active.
 
-## 🚀 Key Features
+##  Key Features
 
 - **Native ESPHome Satellite Protocol** — Connects directly to Home Assistant as an ESPHome voice satellite with auto-discovery via mDNS.
-- **Siri-Style Glowing Border Overlay** — A fullscreen, transparent, click-through border that glows and rotates with a Siri-style color palette (blue/purple/magenta) during activation, turning cyan/blue on success, red on error, and fading out completely when idle.
+- **Modern Text Bubble Overlay** — Assist shows up in the bottom center of your screen in a modern text bubble. It shows you a listening indicator, alongside the text response.
 - **Audio-Reactive Border** — The thickness and blur intensity of the glowing border scale dynamically in real time based on your voice volume.
-- **Wake Word Detection** — Built-in openWakeWord support with pre-trained models (e.g., Alexa, Jarvis, Computer) running locally on your CPU.
+- **Wake Word Detection** — Built-in openWakeWord support with pre-trained models (Computer by default) running locally on your CPU.
 - **WebRTC VAD** — High-quality voice activity detection to start/stop listening accurately.
 - **Flet-Based Settings UI** — A modern settings window to configure audio devices, wake words, thresholds, and optional Home Assistant integrations.
 - **System Tray Integration** — Runs completely in the background within the Windows system tray.
 - **Media Player Volume Management** — Automatically ducks and restores the volume of configured Home Assistant media players when you start speaking.
 - **Interactive Prompts Support** — Accepts incoming prompts from Home Assistant via its HTTP API, allowing Home Assistant to ask you questions and receive voice responses.
 
-## 📋 Requirements
+##  Requirements
 
 - **Windows 10/11** (64-bit)
 - **Home Assistant** server (2024.6+ recommended for native voice satellites)
 - **Microphone and Speakers** connected to your PC
-- **Long-lived access token** from Home Assistant (optional — only needed for media player volume control)
 
-## 🛠️ Installation
+#### Optional
+
+- **Long-lived access token** from Home Assistant (only needed for media player volume control)
+
+##  Installation
 
 ### Option 1: Windows Installer (Recommended)
 1. Download `WinVE-Setup.exe` from the latest release.
@@ -36,7 +39,7 @@ Featuring a premium, borderless Siri-style glowing visual feedback overlay that 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/SmolinskiP/WinVE.git
+   git clone https://github.com/opkelde/WinVE.git
    cd WinVE
    ```
 2. Create a virtual environment and install dependencies:
@@ -51,7 +54,7 @@ Featuring a premium, borderless Siri-style glowing visual feedback overlay that 
    python main.py
    ```
 
-## ⚙️ Home Assistant Integration
+##  Home Assistant Integration
 
 Once WinVE is running:
 1. Go to Home Assistant **Settings → Devices & Services**.
@@ -64,7 +67,7 @@ If you want WinVE to duck your TV or speaker volume while you are speaking to it
 2. Under the **Media Players** tab, enter your Home Assistant Server Address and a Long-Lived Access Token (generate this in HA under Profile → Security → Long-Lived Access Tokens).
 3. Specify the entity IDs of the media players you want to manage (comma-separated, e.g., `media_player.living_room_tv, media_player.kitchen_speaker`).
 
-## 🔄 Interactive Prompts API
+##  Interactive Prompts API
 
 WinVE runs a local HTTP server (default port `8766`) that accepts incoming prompt requests, allowing Home Assistant to initiate conversations (e.g., "The garage door is open. Should I close it?").
 
@@ -80,7 +83,7 @@ WinVE runs a local HTTP server (default port `8766`) that accepts incoming promp
 }
 ```
 
-## 📄 License
+##  License
 
 MIT License. Feel free to use, modify, and distribute this software.
 

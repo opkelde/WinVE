@@ -516,7 +516,7 @@ class HAAssistApp:
             host = utils.get_env("HA_HOST", "")
             threading.Thread(
                 target=utils.play_audio_from_url,
-                args=(url, host, self.animation_server),
+                args=(url, host, None),
                 kwargs={"done_callback": done_callback},
                 daemon=True,
             ).start()
@@ -564,8 +564,6 @@ class HAAssistApp:
                     )
                     if self.satellite_server:
                         self.satellite_server.handle_audio(data)
-                        if self.satellite_server.is_streaming_audio and self.animation_server:
-                            self.animation_server.send_audio_data(data)
                 except Exception as e:
                     logger.debug(f"Audio stream read error: {e}")
                     time.sleep(0.05)
