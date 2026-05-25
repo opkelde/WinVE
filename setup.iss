@@ -4,7 +4,7 @@
 #define MyAppName "WinVE"
 #define MyAppVersion "3.0.0"
 #define MyAppPublisher "Patryk Smoliński"
-#define MyAppURL "https://github.com/SmolinskiP/WinVE"
+#define MyAppURL "https://github.com/opkelde/WinVE"
 #define MyAppExeName "WinVE.exe"
 
 [Setup]
@@ -57,7 +57,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-Filename: "https://github.com/SmolinskiP/WinVE"; Description: "🐙 Visit GitHub Repository"; Flags: shellexec skipifsilent postinstall unchecked
+Filename: "https://github.com/opkelde/WinVE"; Description: "🐙 Visit GitHub Repository"; Flags: shellexec skipifsilent postinstall unchecked
 
 [Code]
 var
