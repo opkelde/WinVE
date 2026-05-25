@@ -200,6 +200,7 @@ class HAAssistApp:
 
         self._refresh_tray_menu()
 
+
     def _get_toggle_label(self):
         """Return label for pause/resume menu item."""
         if self.wake_word_detector and self.wake_word_detector.is_running:
