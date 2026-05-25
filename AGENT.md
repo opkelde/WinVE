@@ -21,7 +21,7 @@ This file contains guidelines for automated contributions to the WinVE repositor
 
 ## Testing
 - Run all automated tests before committing:
-  `py -m pytest -c tests/pytest.ini`
+  `py tests/run_tests.py`
 - Validate Python files compile properly:
-  `py -m py_compile $(git ls-files '*.py')`
+  `py tests/run_tests.py --syntax-only`
 
